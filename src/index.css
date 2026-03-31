@@ -1,5 +1,8 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+/* @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap'); */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -133,9 +136,13 @@
     --radius-md: calc(var(--radius) - 2px);
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) + 4px);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
 
     --font-sans: 'DM Sans', sans-serif;
     --font-display: 'Syne', sans-serif;
+    --font-heading: var(--font-sans);
 
     --color-ink: oklch(0.10 0.015 265);
     --color-paper: oklch(0.966 0.008 80);
@@ -152,6 +159,9 @@
     body {
         @apply bg-background text-foreground;
         font-family: var(--font-sans), sans-serif;
+    }
+    html {
+        @apply font-sans;
     }
   .maplibregl-popup-content {
     @apply bg-transparent! shadow-none! p-0! rounded-none!;
