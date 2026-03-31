@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Installer les dépendances en premier pour tirer parti du cache Docker
 COPY package*.json ./
+
 RUN npm ci
 
 # Le code source est monté via bind mount en dev
