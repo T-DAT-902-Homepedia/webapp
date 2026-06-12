@@ -25,7 +25,11 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "deck.gl": ["./node_modules/deck.gl/typed"],
+      "@deck.gl/core": ["./node_modules/@deck.gl/core/typed"],
+      "@deck.gl/react": ["./node_modules/@deck.gl/react/typed"],
+      "@deck.gl/layers": ["./node_modules/@deck.gl/layers/typed"]
     }
   },
   "include": ["src"]
