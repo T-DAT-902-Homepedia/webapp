@@ -4,7 +4,10 @@ import { GeoJsonLayer } from "deck.gl"
 import type { MapViewState } from "@deck.gl/core"
 import Map from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
+import { ArrowLeft } from "lucide-react"
+import { Link } from "react-router-dom"
 
+import { Button } from "@/components/ui/button"
 import { useChoropleth } from "@/hooks/useChoropleth"
 import { lodForZoom, meshForZoom, useFilters } from "@/store/filters"
 import type { ChoroplethFeature, TypeLocal } from "@/lib/dvf"
@@ -60,7 +63,7 @@ export default function DvfMap() {
   )
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+    <div className="relative h-svh w-svw overflow-hidden bg-background text-foreground">
       <DeckGL
         initialViewState={INITIAL_VIEW_STATE}
         controller
@@ -74,74 +77,59 @@ export default function DvfMap() {
       </DeckGL>
 
       {/* Panneau de contrôle */}
-      <div
-        style={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          background: "rgba(255,255,255,0.95)",
-          borderRadius: 12,
-          padding: "12px 16px",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
-          fontFamily: "system-ui, sans-serif",
-        }}
-      >
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>
+      <div className="absolute top-4 left-4 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" asChild>
+            <Link to="/" aria-label="Retour à l'accueil">
+              <ArrowLeft className="size-4" />
+            </Link>
+          </Button>
+          <span className="font-display text-lg font-bold tracking-tight">
+            Homepedia<span className="text-accent">.</span>
+          </span>
+        </div>
+        <div className="mt-3 text-sm font-semibold">
           Prix au m² — {mesh === "communes" ? "communes" : "départements"}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="mt-2 flex gap-2">
           {TYPES.map((t) => (
-            <button
+            <Button
               key={t}
+              size="sm"
+              variant={t === typeLocal ? "default" : "outline"}
+              className={
+                t === typeLocal
+                  ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                  : undefined
+              }
               onClick={() => setTypeLocal(t)}
-              style={{
-                padding: "4px 12px",
-                borderRadius: 8,
-                border: "1px solid #ccc",
-                cursor: "pointer",
-                background: t === typeLocal ? "#bd0026" : "#fff",
-                color: t === typeLocal ? "#fff" : "#333",
-              }}
             >
               {t}
-            </button>
+            </Button>
           ))}
         </div>
         {isLoading && (
-          <div style={{ marginTop: 8, fontSize: 12, color: "#888" }}>
-            Chargement…
-          </div>
+          <div className="mt-2 text-xs text-muted-foreground">Chargement…</div>
         )}
       </div>
 
       {/* Tooltip au survol */}
       {hovered && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 16,
-            left: 16,
-            background: "rgba(0,0,0,0.8)",
-            color: "#fff",
-            borderRadius: 8,
-            padding: "8px 12px",
-            fontFamily: "system-ui, sans-serif",
-            fontSize: 13,
-            maxWidth: 280,
-          }}
-        >
-          <div style={{ fontWeight: 600 }}>
+        <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
+          <div className="font-display font-semibold">
             {hovered.properties.nom ??
               hovered.properties.code_commune ??
               hovered.properties.code_departement}
           </div>
-          <div>
+          <div className="mt-1">
             Médiane :{" "}
-            {hovered.properties.prix_m2_median != null
-              ? `${Math.round(hovered.properties.prix_m2_median).toLocaleString("fr-FR")} €/m²`
-              : "—"}
+            <span className="font-semibold text-accent">
+              {hovered.properties.prix_m2_median != null
+                ? `${Math.round(hovered.properties.prix_m2_median).toLocaleString("fr-FR")} €/m²`
+                : "—"}
+            </span>
           </div>
-          <div>
+          <div className="text-muted-foreground">
             {hovered.properties.nb_transactions.toLocaleString("fr-FR")}{" "}
             transactions
             {hovered.properties.fiable ? "" : " (faible volume)"}

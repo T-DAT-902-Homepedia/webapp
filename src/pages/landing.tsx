@@ -1,4 +1,5 @@
 import { ArrowRight, BarChart3, Map, Scale } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -44,9 +45,11 @@ export function Landing() {
             <Button variant="ghost" size="sm" asChild>
               <a href="#fonctionnalites">Fonctionnalités</a>
             </Button>
-            <Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
-              Explorer la carte
-              <ArrowRight className="size-4" />
+            <Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90" asChild>
+              <Link to="/carte">
+                Explorer la carte
+                <ArrowRight className="size-4" />
+              </Link>
             </Button>
           </nav>
         </div>
@@ -74,9 +77,11 @@ export function Landing() {
             ville par ville, quartier par quartier.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
-            <Button size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90">
-              Explorer la carte
-              <ArrowRight className="size-4" />
+            <Button size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90" asChild>
+              <Link to="/carte">
+                Explorer la carte
+                <ArrowRight className="size-4" />
+              </Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
               <a href="#fonctionnalites">Découvrir les fonctionnalités</a>
