@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@deck.gl/react": "^8.9.36",
     "@fontsource-variable/dm-sans": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
     "@tailwindcss/vite": "^4.2.1",
@@ -19,6 +20,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "deck.gl": "^8.9.36",
     "lucide-react": "^0.577.0",
     "mapbox-gl": "^3.20.0",
     "maplibre-gl": "^5.20.2",
@@ -26,6 +28,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.71.2",
+    "react-map-gl": "^8.1.1",
     "react-router-dom": "^7.13.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
