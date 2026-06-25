@@ -11,11 +11,13 @@ jobs:
   build_and_preview:
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
+    # Run action JS on Node 20: Node 24's undici regression breaks the OAuth
+    # token request to googleapis ("Premature close" -> Failed to authenticate).
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       - uses: actions/checkout@v4
       - run: npm ci && npm run build
-        env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
