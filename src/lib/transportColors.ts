@@ -13,7 +13,7 @@ export const TRANSPORT_PALETTE: RGBA[] = [
   [0, 109, 44, 255],
 ]
 
-/** Échelle quantile sur la densité (stations/km²).
+/** Échelle quantile sur la densité (arrêts/km²).
  *
  * Prend les valeurs brutes (géométrie et valeurs sont séparées) et renvoie une
  * fonction couleur indexée par valeur. Les seuils sont calculés sur les valeurs
@@ -41,18 +41,4 @@ export function makeTransportScale(values: (number | null | undefined)[]) {
     while (cls < thresholds.length && v > thresholds[cls]) cls++
     return TRANSPORT_PALETTE[cls]
   }
-}
-
-// --- Points d'arrêts : couleur par mode de transport ---------------------------
-
-export const ROUTE_TYPE_COLORS: Record<string, RGBA> = {
-  bus: [58, 105, 200, 230],
-  tramway: [227, 66, 82, 230],
-  "métro": [240, 185, 60, 230],
-  train: [62, 160, 85, 230],
-  autres: [140, 140, 140, 230],
-}
-
-export function routeTypeColor(routeType: string | null | undefined): RGBA {
-  return (routeType && ROUTE_TYPE_COLORS[routeType]) || [140, 140, 140, 230]
 }
