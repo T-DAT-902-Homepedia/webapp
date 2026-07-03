@@ -1,4 +1,4 @@
-import type { ChoroplethFeature } from "@/lib/dvf"
+import type { ChoroplethFeature, ChoroplethProperties } from "@/lib/choropleth"
 
 export type RGBA = [number, number, number, number]
 
@@ -47,18 +47,23 @@ export function quantileScale(
 }
 
 /**
- * Échelle DVF : quantiles sur le prix/m² médian des features fournies. Les
- * communes peu fiables (faible volume) sont atténuées visuellement.
+ * Échelle DVF : quantiles sur la valeur du type de local courant. L'atténuation
+ * « faible volume » utilise le `fiable` du même type (maison_/appart_).
+ * La paramétrisation complète par métrique arrive en PR2.
  */
-export function makeColorScale(features: ChoroplethFeature[]) {
+export function makeColorScale(
+  features: ChoroplethFeature[],
+  getValue: (p: ChoroplethProperties) => number | null,
+  getFiable: (p: ChoroplethProperties) => boolean,
+): (f: ChoroplethFeature) => RGBA {
   const base = quantileScale(
-    features.map((f) => f.properties.prix_m2_median),
+    features.map((f) => getValue(f.properties)),
     PALETTE,
   )
   return function color(feature: ChoroplethFeature): RGBA {
-    const v = feature.properties.prix_m2_median
+    const v = getValue(feature.properties)
     if (v == null) return NO_DATA
     const rgba = base(v)
-    return feature.properties.fiable ? rgba : [rgba[0], rgba[1], rgba[2], 110]
+    return getFiable(feature.properties) ? rgba : [rgba[0], rgba[1], rgba[2], 110]
   }
 }

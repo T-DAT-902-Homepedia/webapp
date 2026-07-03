@@ -9,8 +9,14 @@ import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { useChoropleth } from "@/hooks/useChoropleth"
+import { useMeta } from "@/hooks/useMeta"
 import { lodForZoom, meshForZoom, useFilters } from "@/store/filters"
-import type { ChoroplethFeature, TypeLocal } from "@/lib/dvf"
+import {
+  statsForType,
+  type ChoroplethFeature,
+  type ChoroplethProperties,
+  type TypeLocal,
+} from "@/lib/choropleth"
 import { makeColorScale } from "@/lib/colorScale"
 
 const INITIAL_VIEW_STATE: MapViewState = {
@@ -35,17 +41,34 @@ export default function DvfMap() {
   const mesh = meshForZoom(zoom)
   const lod = lodForZoom(zoom)
 
-  const { data, isLoading } = useChoropleth(mesh, typeLocal, lod)
+  const { isError: metaError } = useMeta()
+  const { data, isLoading } = useChoropleth(mesh, lod)
+
+  // Accessors mémoïsés : changer de type recolore la couche sans la recréer ni
+  // refetcher (le GeoJSON contient les trois familles de colonnes).
+  const getValue = useMemo(() => {
+    const key =
+      typeLocal === "Maison"
+        ? ("maison_prix_m2_median" as const)
+        : ("appart_prix_m2_median" as const)
+    return (p: ChoroplethProperties) => p[key]
+  }, [typeLocal])
+  const getFiable = useMemo(() => {
+    const key = typeLocal === "Maison" ? ("maison_fiable" as const) : ("appart_fiable" as const)
+    return (p: ChoroplethProperties) => p[key]
+  }, [typeLocal])
 
   const colorScale = useMemo(
-    () => makeColorScale(data?.features ?? []),
-    [data],
+    () => makeColorScale(data?.features ?? [], getValue, getFiable),
+    [data, getValue, getFiable],
   )
 
   const layer = useMemo(
     () =>
       new GeoJsonLayer<ChoroplethFeature["properties"]>({
-        id: `choropleth-${mesh}-${typeLocal}-${lod}`,
+        // id stable par (mesh, lod) : un changement de couleur ne doit jamais
+        // reconstruire la couche, seulement repasser dans getFillColor.
+        id: `choropleth-${mesh}-${lod}`,
         data: data ?? EMPTY_COLLECTION,
         filled: true,
         stroked: true,
@@ -55,12 +78,14 @@ export default function DvfMap() {
         pickable: true,
         onHover: (info) =>
           setHovered((info.object as ChoroplethFeature) ?? null),
-        // colorScale change avec les données : il doit déclencher le recalcul
-        // des couleurs (sinon deck.gl garde l'ancienne palette en cache).
-        updateTriggers: { getFillColor: [colorScale, typeLocal] },
+        // colorScale change d'identité quand (data, typeLocal) changent : c'est
+        // lui qui déclenche le recalcul des couleurs.
+        updateTriggers: { getFillColor: [colorScale] },
       }),
-    [data, colorScale, mesh, typeLocal, lod],
+    [data, colorScale, mesh, lod],
   )
+
+  const hoveredStats = hovered ? statsForType(hovered.properties, typeLocal) : null
 
   return (
     <div className="relative h-svh w-svw overflow-hidden bg-background text-foreground">
@@ -108,13 +133,18 @@ export default function DvfMap() {
             </Button>
           ))}
         </div>
-        {isLoading && (
+        {metaError && (
+          <div className="mt-2 max-w-52 text-xs text-destructive">
+            Impossible de charger les données. Réessayez plus tard.
+          </div>
+        )}
+        {isLoading && !metaError && (
           <div className="mt-2 text-xs text-muted-foreground">Chargement…</div>
         )}
       </div>
 
       {/* Tooltip au survol */}
-      {hovered && (
+      {hovered && hoveredStats && (
         <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
           <div className="font-display font-semibold">
             {hovered.properties.nom ??
@@ -124,15 +154,14 @@ export default function DvfMap() {
           <div className="mt-1">
             Médiane :{" "}
             <span className="font-semibold text-accent">
-              {hovered.properties.prix_m2_median != null
-                ? `${Math.round(hovered.properties.prix_m2_median).toLocaleString("fr-FR")} €/m²`
+              {hoveredStats.prix != null
+                ? `${Math.round(hoveredStats.prix).toLocaleString("fr-FR")} €/m²`
                 : "—"}
             </span>
           </div>
           <div className="text-muted-foreground">
-            {hovered.properties.nb_transactions.toLocaleString("fr-FR")}{" "}
-            transactions
-            {hovered.properties.fiable ? "" : " (faible volume)"}
+            {hoveredStats.nb.toLocaleString("fr-FR")} transactions
+            {hoveredStats.fiable ? "" : " (faible volume)"}
           </div>
         </div>
       )}
