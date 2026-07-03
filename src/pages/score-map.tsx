@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
-import { GeoJsonLayer, type Layer } from "deck.gl"
-import type { MapViewState } from "@deck.gl/core"
+import { GeoJsonLayer, ScatterplotLayer, type Layer } from "deck.gl"
+import type { MapViewState, PickingInfo } from "@deck.gl/core"
 import { MapboxOverlay } from "@deck.gl/mapbox"
 import Map, { useControl } from "react-map-gl/maplibre"
 import type {
@@ -21,6 +21,8 @@ import {
 } from "@/lib/score"
 import { makeDivergingScale, makeSequentialScale } from "@/lib/scoreColors"
 import { ScoreSidebar, type Basemap } from "@/components/score-sidebar"
+import { loadWordCloud, type CityWordCloud } from "@/lib/parseAvis"
+import WordCloudPopup from "@/components/WordCloudPopup"
 
 const INITIAL_VIEW_STATE: MapViewState = {
   longitude: 2.4,
@@ -94,11 +96,20 @@ export default function ScoreMap() {
   const [opacity, setOpacity] = useState(0.8)
   const [basemap, setBasemap] = useState<Basemap>("clair")
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
+  const [wordCloudEnabled, setWordCloudEnabled] = useState(false)
+  const [selectedCity, setSelectedCity] = useState<CityWordCloud | null>(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["score"],
     queryFn: fetchScore,
     staleTime: Infinity, // fichier statique : jamais périmé en session.
+  })
+
+  const { data: cities } = useQuery({
+    queryKey: ["wordcloud"],
+    queryFn: loadWordCloud,
+    staleTime: Infinity,
+    enabled: wordCloudEnabled,
   })
 
   const diverging = DIVERGING_METRICS.has(metric)
@@ -128,8 +139,25 @@ export default function ScoreMap() {
       // deck.gl garde l'ancienne palette en cache).
       updateTriggers: { getFillColor: [scale, metric] },
     })
-    return [choropleth]
-  }, [data, scale, metric, opacity, fillBeforeId])
+
+    if (!wordCloudEnabled || !cities) return [choropleth]
+
+    const wordCloudLayer = new ScatterplotLayer<CityWordCloud>({
+      id: "wordcloud-cities",
+      data: cities,
+      getPosition: (c) => [c.lng, c.lat],
+      getFillColor: [99, 102, 241, 220],
+      getLineColor: [255, 255, 255],
+      lineWidthMinPixels: 1.5,
+      stroked: true,
+      radiusUnits: "pixels",
+      getRadius: 7,
+      pickable: true,
+      onClick: (info: PickingInfo<CityWordCloud>) =>
+        setSelectedCity(info.object ?? null),
+    })
+    return [choropleth, wordCloudLayer]
+  }, [data, scale, metric, opacity, fillBeforeId, wordCloudEnabled, cities])
 
   const hoveredValue = hovered?.properties[metric]
 
@@ -172,6 +200,8 @@ export default function ScoreMap() {
         onBasemap={setBasemap}
         isLoading={isLoading}
         isError={isError}
+        wordCloudEnabled={wordCloudEnabled}
+        onWordCloudEnabled={setWordCloudEnabled}
       />
 
       <div className="relative flex-1">
@@ -206,6 +236,16 @@ export default function ScoreMap() {
                 : "prix n/d"}
             </div>
           </div>
+        )}
+
+        {selectedCity && (
+          <div
+            onClick={() => setSelectedCity(null)}
+            className="fixed inset-0 z-[999] bg-black/45"
+          />
+        )}
+        {selectedCity && (
+          <WordCloudPopup city={selectedCity} onClose={() => setSelectedCity(null)} />
         )}
       </div>
     </div>

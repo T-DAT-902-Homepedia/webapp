@@ -1,5 +1,5 @@
-import { Accordion, Slider, Tooltip } from "radix-ui"
-import { ArrowLeft, ChevronDown, Info } from "lucide-react"
+import { Accordion, Checkbox, Slider, Tooltip } from "radix-ui"
+import { ArrowLeft, Check, ChevronDown, Info } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,8 @@ type ScoreSidebarProps = {
   onBasemap: (b: Basemap) => void
   isLoading: boolean
   isError: boolean
+  wordCloudEnabled: boolean
+  onWordCloudEnabled: (v: boolean) => void
 }
 
 /** Bulle d'aide « i » réutilisée sur chaque métrique et titre de section. */
@@ -97,6 +99,8 @@ export function ScoreSidebar({
   onBasemap,
   isLoading,
   isError,
+  wordCloudEnabled,
+  onWordCloudEnabled,
 }: ScoreSidebarProps) {
   const legend = diverging ? DIV_LEGEND : SEQ_LEGEND
 
@@ -241,6 +245,25 @@ export function ScoreSidebar({
                 </Button>
               ))}
             </div>
+          </AccordionSection>
+
+          <AccordionSection value="calques" title="Calques">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox.Root
+                checked={wordCloudEnabled}
+                onCheckedChange={(v) => onWordCloudEnabled(v === true)}
+                className="flex size-4 shrink-0 items-center justify-center rounded border border-input bg-background data-[state=checked]:border-accent data-[state=checked]:bg-accent"
+              >
+                <Checkbox.Indicator>
+                  <Check className="size-3 text-accent-foreground" />
+                </Checkbox.Indicator>
+              </Checkbox.Root>
+              Nuage de mots des avis
+            </label>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Affiche un marqueur par ville ; cliquez dessus pour voir les mots
+              les plus fréquents dans les avis.
+            </p>
           </AccordionSection>
         </Accordion.Root>
       </aside>
