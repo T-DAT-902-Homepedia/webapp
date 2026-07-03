@@ -20,6 +20,19 @@ export const BASEMAP_LABELS: Record<Basemap, string> = {
 }
 const BASEMAP_KEYS = Object.keys(BASEMAP_LABELS) as Basemap[]
 
+export type MapView = { center: [number, number]; zoom: number }
+
+// Points de recentrage : France métropolitaine + les 5 DROM (éloignés, non
+// visibles au zoom métropole -> on y accède par flyTo).
+const CENTERS: { label: string; view: MapView }[] = [
+  { label: "France métropolitaine", view: { center: [2.4, 46.6], zoom: 5 } },
+  { label: "Guadeloupe", view: { center: [-61.55, 16.2], zoom: 9 } },
+  { label: "Martinique", view: { center: [-61.02, 14.64], zoom: 9 } },
+  { label: "Guyane", view: { center: [-53.2, 3.9], zoom: 7 } },
+  { label: "La Réunion", view: { center: [55.53, -21.13], zoom: 9 } },
+  { label: "Mayotte", view: { center: [45.16, -12.83], zoom: 10 } },
+]
+
 type ScoreSidebarProps = {
   metrics: Metric[]
   metric: Metric
@@ -29,6 +42,7 @@ type ScoreSidebarProps = {
   onOpacity: (v: number) => void
   basemap: Basemap
   onBasemap: (b: Basemap) => void
+  onCenter: (view: MapView) => void
   isLoading: boolean
   isError: boolean
   wordCloudEnabled: boolean
@@ -97,6 +111,7 @@ export function ScoreSidebar({
   onOpacity,
   basemap,
   onBasemap,
+  onCenter,
   isLoading,
   isError,
   wordCloudEnabled,
@@ -264,6 +279,22 @@ export function ScoreSidebar({
               Affiche un marqueur par ville ; cliquez dessus pour voir les mots
               les plus fréquents dans les avis.
             </p>
+          </AccordionSection>
+
+          <AccordionSection value="centrer" title="Centrer la carte">
+            <div className="grid gap-1.5">
+              {CENTERS.map((c) => (
+                <Button
+                  key={c.label}
+                  size="sm"
+                  variant="outline"
+                  className="justify-start"
+                  onClick={() => onCenter(c.view)}
+                >
+                  {c.label}
+                </Button>
+              ))}
+            </div>
           </AccordionSection>
         </Accordion.Root>
       </aside>

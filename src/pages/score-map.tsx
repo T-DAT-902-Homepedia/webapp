@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { GeoJsonLayer, ScatterplotLayer, type Layer } from "deck.gl"
 import type { MapViewState, PickingInfo } from "@deck.gl/core"
 import { MapboxOverlay } from "@deck.gl/mapbox"
-import Map, { useControl } from "react-map-gl/maplibre"
+import Map, { useControl, type MapRef } from "react-map-gl/maplibre"
 import type {
   IControl,
   Map as MaplibreMap,
@@ -20,7 +20,7 @@ import {
   type ScoreFeature,
 } from "@/lib/score"
 import { makeDivergingScale, makeSequentialScale } from "@/lib/scoreColors"
-import { ScoreSidebar, type Basemap } from "@/components/score-sidebar"
+import { ScoreSidebar, type Basemap, type MapView } from "@/components/score-sidebar"
 import { loadWordCloud, type CityWordCloud } from "@/lib/parseAvis"
 import WordCloudPopup from "@/components/WordCloudPopup"
 
@@ -29,6 +29,9 @@ const INITIAL_VIEW_STATE: MapViewState = {
   latitude: 46.6,
   zoom: 5,
 }
+
+// Dézoom plafonné : au-delà on ne verrait plus que l'océan autour de la France.
+const MIN_ZOOM = 4
 
 // Identité stable pour deck.gl pendant le chargement (un littéral inline
 // recréerait la couche à chaque render).
@@ -94,10 +97,15 @@ export default function ScoreMap() {
   const [hovered, setHovered] = useState<ScoreFeature | null>(null)
   const [metric, setMetric] = useState<Metric>("score_valeur")
   const [opacity, setOpacity] = useState(0.8)
-  const [basemap, setBasemap] = useState<Basemap>("clair")
+  const [basemap, setBasemap] = useState<Basemap>("satellite")
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
   const [wordCloudEnabled, setWordCloudEnabled] = useState(false)
   const [selectedCity, setSelectedCity] = useState<CityWordCloud | null>(null)
+  const mapRef = useRef<MapRef>(null)
+
+  // Recentre la carte (France métro ou un DROM) via une animation flyTo.
+  const centerOn = (view: MapView) =>
+    mapRef.current?.flyTo({ center: view.center, zoom: view.zoom, duration: 1200 })
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["score"],
@@ -198,6 +206,7 @@ export default function ScoreMap() {
         onOpacity={setOpacity}
         basemap={basemap}
         onBasemap={setBasemap}
+        onCenter={centerOn}
         isLoading={isLoading}
         isError={isError}
         wordCloudEnabled={wordCloudEnabled}
@@ -206,7 +215,9 @@ export default function ScoreMap() {
 
       <div className="relative flex-1">
         <Map
+          ref={mapRef}
           initialViewState={INITIAL_VIEW_STATE}
+          minZoom={MIN_ZOOM}
           mapStyle={BASEMAP_STYLES[basemap]}
           // Rechargement complet au changement de fond (les styles Carto partagent
           // les mêmes ids ; le diff laisserait des libellés anglais résiduels).
