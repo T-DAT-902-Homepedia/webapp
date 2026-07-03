@@ -64,7 +64,7 @@ export function Landing() {
       <section className="relative overflow-hidden border-b">
         <FranceOutline
           aria-hidden
-          className="pointer-events-none absolute top-1/2 right-[-14%] hidden w-[640px] -translate-y-1/2 text-accent lg:block xl:right-[-10%] xl:w-[880px]"
+          className="pointer-events-none absolute top-1/2 right-[-14%] hidden w-[740px] -translate-y-1/5 text-accent lg:block xl:right-[-30%] xl:w-[1800px]"
         />
         <div
           aria-hidden
