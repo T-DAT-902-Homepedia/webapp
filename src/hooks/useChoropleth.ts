@@ -1,25 +1,30 @@
 import { useQuery } from "@tanstack/react-query"
 
-import {
-  fetchChoroplethCommunes,
-  fetchChoroplethDepartements,
-  type ChoroplethFeatureCollection,
-  type Lod,
-  type TypeLocal,
-} from "@/lib/dvf"
-import type { Mesh } from "@/store/filters"
+import { fetchChoropleth, type Lod, type Mesh } from "@/lib/choropleth"
+import { useMeta } from "@/hooks/useMeta"
 
 /**
- * Récupère la FeatureCollection choroplèthe pour la maille / le LOD courants.
- * La clé de cache est déterministe (maille + type + lod) -> react-query déduplique
- * et met en cache automatiquement.
+ * FeatureCollection choroplèthe pour la maille / le LOD courants, depuis le CDN.
+ * Le type de local ne fait pas partie de la clé : le GeoJSON contient les trois
+ * familles de colonnes, changer de type ne refetch rien.
+ *
+ * Le clamp du LOD vit ici (pas dans lodForZoom) pour que la clé de cache ne
+ * produise pas de doublons mid/high identiques.
  */
-export function useChoropleth(mesh: Mesh, typeLocal: TypeLocal, lod: Lod) {
-  return useQuery<ChoroplethFeatureCollection>({
-    queryKey: ["choropleth", mesh, typeLocal, lod],
-    queryFn: () =>
-      mesh === "communes"
-        ? fetchChoroplethCommunes(typeLocal, lod)
-        : fetchChoroplethDepartements(typeLocal, lod),
+export function useChoropleth(mesh: Mesh, lod: Lod) {
+  const { data: meta } = useMeta()
+  const effectiveLod: Lod =
+    mesh === "communes"
+      ? lod === "high"
+        ? "mid" // clamp PR1 : le chargement high par département arrive en PR3
+        : lod
+      : lod === "low"
+        ? "low"
+        : "mid" // départements : low|mid seulement
+  return useQuery({
+    queryKey: ["choropleth", meta?.base, mesh, effectiveLod],
+    queryFn: () => fetchChoropleth(meta!.base, mesh, effectiveLod),
+    enabled: !!meta,
+    staleTime: Infinity,
   })
 }

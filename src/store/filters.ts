@@ -1,11 +1,9 @@
 import { create } from "zustand"
 
-import type { Lod, TypeLocal } from "@/lib/dvf"
+import type { Lod, Mesh, TypeLocal } from "@/lib/choropleth"
 
 // Seuils de zoom deck.gl pilotant la maille et le niveau de détail géométrique.
 // En dézoom -> départements (LOD grossier) ; en zoom -> communes (LOD fin).
-export type Mesh = "departements" | "communes"
-
 export function meshForZoom(zoom: number): Mesh {
   return zoom >= 8 ? "communes" : "departements"
 }
