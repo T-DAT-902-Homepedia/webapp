@@ -153,8 +153,8 @@ export default function ScoreMap() {
       radiusUnits: "pixels",
       getRadius: 7,
       pickable: true,
-      onClick: (info: PickingInfo<CityWordCloud>) =>
-        setSelectedCity(info.object ?? null),
+      onClick: (info: PickingInfo) =>
+        setSelectedCity((info.object as CityWordCloud) ?? null),
     })
     return [choropleth, wordCloudLayer]
   }, [data, scale, metric, opacity, fillBeforeId, wordCloudEnabled, cities])
