@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/syne";
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
@@ -134,8 +135,8 @@
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) + 4px);
 
-    --font-sans: 'DM Sans', sans-serif;
-    --font-display: 'Syne', sans-serif;
+    --font-sans: 'DM Sans Variable', sans-serif;
+    --font-display: 'Syne Variable', sans-serif;
 
     --color-ink: oklch(0.10 0.015 265);
     --color-paper: oklch(0.966 0.008 80);
@@ -143,6 +144,20 @@
     --color-blue-light: oklch(0.96 0.022 265);
     --color-green: oklch(0.74 0.16 165);
     --color-warm: oklch(0.73 0.165 55);
+
+    --animate-map-ping: map-ping 2.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+
+    @keyframes map-ping {
+        0% {
+            transform: scale(1);
+            opacity: 0.5;
+        }
+        70%,
+        100% {
+            transform: scale(3.5);
+            opacity: 0;
+        }
+    }
 }
 
 @layer base {
