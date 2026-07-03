@@ -37,3 +37,6 @@ skills-lock.json
 
 # Installed design tooling, not part of the project
 .github/skills/
+
+# Playwright MCP artifacts (snapshots, console logs)
+.playwright-mcp/
