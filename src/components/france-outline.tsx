@@ -11,19 +11,28 @@ const FRANCE_PATH =
 
 // Positions viewBox des grandes villes, mêmes projection et normalisation que
 // FRANCE_PATH. Délais irréguliers pour éviter un clignotement synchrone.
+// pop = population communale (INSEE, ordre de grandeur 2021).
 const CITY_DOTS = [
-  { name: "Paris", x: 498, y: 226, delay: "0s" },
-  { name: "Lyon", x: 671, y: 539, delay: "1.3s" },
-  { name: "Marseille", x: 708, y: 789, delay: "0.5s" },
-  { name: "Toulouse", x: 435, y: 757, delay: "1.9s" },
-  { name: "Bordeaux", x: 294, y: 633, delay: "0.9s" },
-  { name: "Nantes", x: 226, y: 392, delay: "2.3s" },
-  { name: "Lille", x: 547, y: 47, delay: "1.6s" },
-  { name: "Strasbourg", x: 874, y: 255, delay: "0.7s" },
-  { name: "Rennes", x: 217, y: 301, delay: "1.1s" },
-  { name: "Nice", x: 840, y: 747, delay: "2.6s" },
-  { name: "Ajaccio", x: 943, y: 928, delay: "2.1s" },
+  { name: "Paris", x: 498, y: 226, delay: "0s", pop: 2_133_000 },
+  { name: "Lyon", x: 671, y: 539, delay: "1.3s", pop: 522_000 },
+  { name: "Marseille", x: 708, y: 789, delay: "0.5s", pop: 870_000 },
+  { name: "Toulouse", x: 435, y: 757, delay: "1.9s", pop: 504_000 },
+  { name: "Bordeaux", x: 294, y: 633, delay: "0.9s", pop: 260_000 },
+  { name: "Nantes", x: 226, y: 392, delay: "2.3s", pop: 320_000 },
+  { name: "Lille", x: 547, y: 47, delay: "1.6s", pop: 236_000 },
+  { name: "Strasbourg", x: 874, y: 255, delay: "0.7s", pop: 290_000 },
+  { name: "Rennes", x: 217, y: 301, delay: "1.1s", pop: 225_000 },
+  { name: "Nice", x: 840, y: 747, delay: "2.6s", pop: 348_000 },
+  { name: "Ajaccio", x: 943, y: 928, delay: "2.1s", pop: 73_000 },
 ]
+
+const POP_MAX = Math.max(...CITY_DOTS.map((c) => c.pop))
+
+// Aire du point proportionnelle à la population (échelle racine carrée),
+// bornée entre r=2 (petite ville) et r=7 (Paris).
+function dotRadius(pop: number) {
+  return 2 + Math.sqrt(pop / POP_MAX) * 5
+}
 
 export function FranceOutline(props: SVGProps<SVGSVGElement>) {
   return (
@@ -48,7 +57,7 @@ export function FranceOutline(props: SVGProps<SVGSVGElement>) {
           <circle
             cx={city.x}
             cy={city.y}
-            r={7}
+            r={dotRadius(city.pop) + 3}
             fill="currentColor"
             opacity={0}
             className="origin-center [transform-box:fill-box] motion-safe:animate-map-ping"
@@ -57,7 +66,7 @@ export function FranceOutline(props: SVGProps<SVGSVGElement>) {
           <circle
             cx={city.x}
             cy={city.y}
-            r={4}
+            r={dotRadius(city.pop)}
             fill="currentColor"
             fillOpacity={0.75}
           />
