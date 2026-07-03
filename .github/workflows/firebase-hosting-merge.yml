@@ -11,9 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Pin Node 20: Node 24.17.0 + node-fetch regression breaks firebase-tools'
+      # OAuth token request ("Premature close" -> Failed to authenticate).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - run: npm ci && npm run build
-        env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

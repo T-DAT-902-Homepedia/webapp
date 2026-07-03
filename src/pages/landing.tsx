@@ -1,6 +1,7 @@
 import { ArrowRight, BarChart3, Map, Scale } from "lucide-react"
 import { Link } from "react-router-dom"
 
+import { FranceOutline } from "@/components/france-outline"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
@@ -45,7 +46,11 @@ export function Landing() {
             <Button variant="ghost" size="sm" asChild>
               <a href="#fonctionnalites">Fonctionnalités</a>
             </Button>
-            <Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90" asChild>
+            <Button
+              size="sm"
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+              asChild
+            >
               <Link to="/carte">
                 Explorer la carte
                 <ArrowRight className="size-4" />
@@ -57,9 +62,13 @@ export function Landing() {
 
       {/* Hero */}
       <section className="relative overflow-hidden border-b">
+        <FranceOutline
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 right-[-14%] hidden w-[740px] -translate-y-1/5 text-accent lg:block xl:right-[-30%] xl:w-[1800px]"
+        />
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_40%,black_30%,transparent_100%)]"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_40%,black_30%,transparent_100%)] bg-[size:56px_56px]"
         />
         <div className="relative mx-auto max-w-6xl px-6 py-24 md:py-32">
           <Badge
@@ -68,8 +77,9 @@ export function Landing() {
           >
             Données ouvertes · DVF · INSEE
           </Badge>
-          <h1 className="font-display max-w-3xl text-5xl leading-[1.05] font-bold tracking-tight text-balance md:text-7xl">
-            Le marché immobilier français, <span className="text-accent">cartographié</span>.
+          <h1 className="max-w-3xl font-display text-5xl leading-[1.05] font-bold tracking-tight text-balance md:text-7xl">
+            Le marché immobilier français,{" "}
+            <span className="text-accent">cartographié</span>.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
             Homepedia agrège les transactions immobilières publiques et les
@@ -77,7 +87,11 @@ export function Landing() {
             ville par ville, quartier par quartier.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
-            <Button size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90" asChild>
+            <Button
+              size="lg"
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+              asChild
+            >
               <Link to="/carte">
                 Explorer la carte
                 <ArrowRight className="size-4" />
@@ -110,7 +124,7 @@ export function Landing() {
           <p className="text-sm font-medium tracking-widest text-accent uppercase">
             Fonctionnalités
           </p>
-          <h2 className="font-display mt-3 max-w-2xl text-3xl font-bold tracking-tight md:text-5xl">
+          <h2 className="mt-3 max-w-2xl font-display text-3xl font-bold tracking-tight md:text-5xl">
             Toute la donnée, sans le bruit.
           </h2>
           <div className="mt-14 grid gap-10 md:grid-cols-3">
@@ -119,7 +133,7 @@ export function Landing() {
                 <div className="flex size-11 items-center justify-center rounded-lg bg-accent/10 text-accent transition-colors group-hover:bg-accent group-hover:text-accent-foreground">
                   <feature.icon className="size-5" />
                 </div>
-                <h3 className="font-display mt-5 text-xl font-semibold">
+                <h3 className="mt-5 font-display text-xl font-semibold">
                   {feature.title}
                 </h3>
                 <p className="mt-2 leading-relaxed text-muted-foreground">
