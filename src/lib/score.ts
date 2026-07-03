@@ -1,13 +1,14 @@
 import type { Geometry } from "geojson"
 import { z } from "zod"
 
-// Score territoire : GeoJSON statique exporté depuis le gold duckpipe (GCS) et
-// servi tel quel par Firebase Hosting (bucket GCS privé -> pas de lecture directe
-// navigateur). Fetch littéral root-relative, PAS via l'API.
-const DATA_URL = "/data/score.geojson"
-
-// Version : bust le cache HTTP quand le fichier est régénéré (nouveau run gold).
-const DATA_VERSION = "1"
+// Score territoire : GeoJSON exporté depuis le gold duckpipe et publié sur le
+// bucket public homepedia-web (public + CORS). Le front le récupère directement
+// par HTTP, comme un appel d'API — pas de fichier dans le repo, pas d'API métier.
+// Surchargeable via VITE_SCORE_URL. La fraîcheur est gérée côté objet GCS
+// (Cache-Control public, max-age=300).
+const SCORE_URL =
+  import.meta.env.VITE_SCORE_URL ??
+  "https://storage.googleapis.com/homepedia-web/v1/score.geojson"
 
 // --- Métriques exposées -------------------------------------------------------
 
@@ -81,9 +82,9 @@ const scoreEnvelope = z.object({
   features: z.array(z.unknown()),
 })
 
-/** Charge le GeoJSON statique (géométrie + toutes les métriques, un seul fetch). */
+/** Charge le GeoJSON depuis le bucket (géométrie + toutes les métriques, un seul fetch). */
 export async function fetchScore(): Promise<ScoreCollection> {
-  const res = await fetch(`${DATA_URL}?v=${DATA_VERSION}`)
+  const res = await fetch(SCORE_URL)
   if (!res.ok) {
     throw new Error(`score.geojson -> ${res.status} ${res.statusText}`)
   }
