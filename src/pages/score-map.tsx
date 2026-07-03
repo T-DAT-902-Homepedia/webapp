@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { GeoJsonLayer, type Layer } from "deck.gl"
+import { GeoJsonLayer, HeatmapLayer, type Layer } from "deck.gl"
 import type { MapViewState } from "@deck.gl/core"
 import { MapboxOverlay } from "@deck.gl/mapbox"
 import Map, { useControl } from "react-map-gl/maplibre"
@@ -82,7 +82,8 @@ function fmt(metric: Metric, v: number | null | undefined): string {
  *  (via beforeId), donc sous les labels du fond de carte qui restent lisibles. */
 function DeckOverlay({ layers }: { layers: Layer[] }) {
   const overlay = useControl(
-    () => new MapboxOverlay({ interleaved: true, layers }) as unknown as IControl,
+    () =>
+      new MapboxOverlay({ interleaved: true, layers }) as unknown as IControl
   )
   ;(overlay as unknown as MapboxOverlay).setProps({ layers })
   return null
@@ -95,6 +96,10 @@ export default function ScoreMap() {
   const [basemap, setBasemap] = useState<Basemap>("clair")
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
 
+  // Paramètres réglables pour la Heatmap
+  const [heatmapRadius, setHeatmapRadius] = useState<number>(30)
+  const [heatmapIntensity, setHeatmapIntensity] = useState<number>(3)
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ["score"],
     queryFn: fetchScore,
@@ -102,6 +107,7 @@ export default function ScoreMap() {
   })
 
   const diverging = DIVERGING_METRICS.has(metric)
+  const isHeatmap = metric === "n_prix" || metric === "n_proximite"
 
   // Échelle recalculée quand la métrique ou les données changent.
   const scale = useMemo(() => {
@@ -110,26 +116,94 @@ export default function ScoreMap() {
   }, [data, metric, diverging])
 
   const layers = useMemo(() => {
-    const choropleth = new GeoJsonLayer<ScoreFeature["properties"]>({
-      id: "score-choropleth",
-      data: data ?? EMPTY_COLLECTION,
-      // beforeId glisse la couche sous les labels (prop runtime de @deck.gl/mapbox,
-      // non typée en v8) ; spread conditionnel pour éviter l'erreur de type.
-      ...(fillBeforeId ? { beforeId: fillBeforeId } : {}),
-      filled: true,
-      stroked: true,
-      opacity,
-      getFillColor: (f) => scale((f as ScoreFeature).properties[metric]),
-      getLineColor: [255, 255, 255, 120],
-      lineWidthMinPixels: 0.5,
-      pickable: true,
-      onHover: (info) => setHovered((info.object as ScoreFeature) ?? null),
-      // metric + scale doivent déclencher le recalcul des couleurs (sinon
-      // deck.gl garde l'ancienne palette en cache).
-      updateTriggers: { getFillColor: [scale, metric] },
-    })
-    return [choropleth]
-  }, [data, scale, metric, opacity, fillBeforeId])
+    const layerList: Layer[] = []
+
+    if (isHeatmap) {
+      // 1. Heatmap (active uniquement pour n_prix et n_proximite)
+      layerList.push(
+        new HeatmapLayer<ScoreFeature>({
+          id: `score-heatmap-${metric}`,
+          data: data?.features ?? EMPTY_COLLECTION.features,
+          // Extraction "Type-Safe" (sans any) du centre du polygone
+          getPosition: (f: ScoreFeature) => {
+            const geom = f.geometry
+            if (!geom) return [0, 0]
+
+            switch (geom.type) {
+              case "Point":
+                return geom.coordinates as [number, number]
+              case "Polygon":
+                return (geom.coordinates[0]?.[0] as [number, number]) ?? [0, 0]
+              case "MultiPolygon":
+                return (
+                  (geom.coordinates[0]?.[0]?.[0] as [number, number]) ?? [0, 0]
+                )
+              default:
+                return [0, 0]
+            }
+          },
+          // On utilise la métrique sélectionnée comme poids de la carte de chaleur
+          getWeight: (f: ScoreFeature) => f.properties[metric] ?? 0,
+          radiusPixels: heatmapRadius,
+          intensity: heatmapIntensity,
+          threshold: 0.03,
+          opacity,
+          updateTriggers: {
+            getWeight: [metric],
+            radiusPixels: [heatmapRadius],
+            intensity: [heatmapIntensity],
+            opacity: [opacity],
+          },
+        })
+      )
+
+      // 2. Couche invisible (GeoJson) pour préserver le survol au passage de la souris
+      layerList.push(
+        new GeoJsonLayer<ScoreFeature["properties"]>({
+          id: "score-heatmap-picking",
+          data: data ?? EMPTY_COLLECTION,
+          ...(fillBeforeId ? { beforeId: fillBeforeId } : {}),
+          filled: true,
+          stroked: false,
+          getFillColor: [0, 0, 0, 0], // Totalement transparent
+          pickable: true,
+          onHover: (info) => setHovered((info.object as ScoreFeature) ?? null),
+        })
+      )
+    } else {
+      // 3. Choroplèthe classique pour tous les autres cas
+      const choropleth = new GeoJsonLayer<ScoreFeature["properties"]>({
+        id: "score-choropleth",
+        data: data ?? EMPTY_COLLECTION,
+        // beforeId glisse la couche sous les labels (prop runtime de @deck.gl/mapbox,
+        // non typée en v8) ; spread conditionnel pour éviter l'erreur de type.
+        ...(fillBeforeId ? { beforeId: fillBeforeId } : {}),
+        filled: true,
+        stroked: true,
+        opacity,
+        getFillColor: (f) => scale((f as ScoreFeature).properties[metric]),
+        getLineColor: [255, 255, 255, 120],
+        lineWidthMinPixels: 0.5,
+        pickable: true,
+        onHover: (info) => setHovered((info.object as ScoreFeature) ?? null),
+        // metric + scale doivent déclencher le recalcul des couleurs (sinon
+        // deck.gl garde l'ancienne palette en cache).
+        updateTriggers: { getFillColor: [scale, metric] },
+      })
+      layerList.push(choropleth)
+    }
+
+    return layerList
+  }, [
+    data,
+    scale,
+    metric,
+    opacity,
+    fillBeforeId,
+    isHeatmap,
+    heatmapRadius,
+    heatmapIntensity,
+  ])
 
   const hoveredValue = hovered?.properties[metric]
 
@@ -172,6 +246,10 @@ export default function ScoreMap() {
         onBasemap={setBasemap}
         isLoading={isLoading}
         isError={isError}
+        heatmapRadius={heatmapRadius}
+        onHeatmapRadiusChange={setHeatmapRadius}
+        heatmapIntensity={heatmapIntensity}
+        onHeatmapIntensityChange={setHeatmapIntensity}
       />
 
       <div className="relative flex-1">
@@ -187,7 +265,7 @@ export default function ScoreMap() {
           <DeckOverlay layers={layers} />
         </Map>
 
-        {/* Tooltip au survol */}
+        {/* Tooltip au survol (Identique pour Heatmap et Choroplèthe) */}
         {hovered && (
           <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
             <div className="font-display font-semibold">

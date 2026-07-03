@@ -12,6 +12,7 @@ import {
 import { DIV_LEGEND, SEQ_LEGEND } from "@/lib/scoreColors"
 
 export type Basemap = "clair" | "sombre" | "satellite" | "couleur"
+// eslint-disable-next-line react-refresh/only-export-components
 export const BASEMAP_LABELS: Record<Basemap, string> = {
   clair: "Clair",
   sombre: "Sombre",
@@ -31,6 +32,10 @@ type ScoreSidebarProps = {
   onBasemap: (b: Basemap) => void
   isLoading: boolean
   isError: boolean
+  heatmapRadius: number
+  onHeatmapRadiusChange: (radius: number) => void
+  heatmapIntensity: number
+  onHeatmapIntensityChange: (intensity: number) => void
 }
 
 /** Bulle d'aide « i » réutilisée sur chaque métrique et titre de section. */
@@ -63,10 +68,10 @@ function InfoTip({ text, label }: { text: string; label: string }) {
 }
 
 function AccordionSection({
-  value,
-  title,
-  children,
-}: {
+                            value,
+                            title,
+                            children,
+                          }: {
   value: string
   title: string
   children: React.ReactNode
@@ -87,18 +92,23 @@ function AccordionSection({
 }
 
 export function ScoreSidebar({
-  metrics,
-  metric,
-  onMetric,
-  diverging,
-  opacity,
-  onOpacity,
-  basemap,
-  onBasemap,
-  isLoading,
-  isError,
-}: ScoreSidebarProps) {
+                               metrics,
+                               metric,
+                               onMetric,
+                               diverging,
+                               opacity,
+                               onOpacity,
+                               basemap,
+                               onBasemap,
+                               isLoading,
+                               isError,
+                               heatmapRadius,
+                               onHeatmapRadiusChange,
+                               heatmapIntensity,
+                               onHeatmapIntensityChange,
+                             }: ScoreSidebarProps) {
   const legend = diverging ? DIV_LEGEND : SEQ_LEGEND
+  const isHeatmap = metric === "n_prix" || metric === "n_proximite"
 
   return (
     <Tooltip.Provider>
@@ -150,31 +160,49 @@ export function ScoreSidebar({
             })}
           </div>
 
-          {/* Légende du dégradé */}
+          {/* Légende du dégradé (S'adapte dynamiquement si Heatmap ou Choroplèthe) */}
           <div className="mt-3">
-            <div className="flex h-2 overflow-hidden rounded-sm">
-              {legend.map((c, i) => (
+            {isHeatmap ? (
+              <>
+                <div className="text-[11px] font-semibold text-muted-foreground mb-1.5">Densité (Carte de chaleur)</div>
                 <div
-                  key={i}
-                  className="flex-1"
-                  style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
+                  className="h-2 w-full rounded-sm"
+                  style={{
+                    background: "linear-gradient(to right, rgba(0,0,255,0), rgba(0,255,255,1), rgba(0,255,0,1), rgba(255,255,0,1), rgba(255,0,0,1))"
+                  }}
                 />
-              ))}
-            </div>
-            <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-              {diverging ? (
-                <>
-                  <span>Cher</span>
-                  <span>Neutre</span>
-                  <span>Bon rapport</span>
-                </>
-              ) : (
-                <>
+                <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
                   <span>Faible</span>
-                  <span>Élevé</span>
-                </>
-              )}
-            </div>
+                  <span>Forte</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex h-2 overflow-hidden rounded-sm">
+                  {legend.map((c, i) => (
+                    <div
+                      key={i}
+                      className="flex-1"
+                      style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
+                  {diverging ? (
+                    <>
+                      <span>Cher</span>
+                      <span>Neutre</span>
+                      <span>Bon rapport</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Faible</span>
+                      <span>Élevé</span>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {isLoading && (
@@ -215,6 +243,53 @@ export function ScoreSidebar({
               <Slider.Thumb className="block size-4 rounded-full border-2 border-accent bg-background shadow transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             </Slider.Root>
           </AccordionSection>
+
+          {/* Section affichée uniquement en mode Heatmap */}
+          {isHeatmap && (
+            <AccordionSection value="heatmap-tuning" title="Configuration Heatmap">
+              <div className="mb-4">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Rayon de diffusion</span>
+                  <span className="tabular-nums text-foreground">{heatmapRadius} px</span>
+                </div>
+                <Slider.Root
+                  className="relative mt-3 flex h-4 w-full touch-none items-center select-none"
+                  min={10}
+                  max={100}
+                  step={5}
+                  value={[heatmapRadius]}
+                  onValueChange={([v]) => onHeatmapRadiusChange(v)}
+                  aria-label="Rayon du heatmap"
+                >
+                  <Slider.Track className="relative h-1.5 grow rounded-full bg-muted">
+                    <Slider.Range className="absolute h-full rounded-full bg-accent" />
+                  </Slider.Track>
+                  <Slider.Thumb className="block size-4 rounded-full border-2 border-accent bg-background shadow transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                </Slider.Root>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Intensité maximale</span>
+                  <span className="tabular-nums text-foreground">{heatmapIntensity.toFixed(1)}x</span>
+                </div>
+                <Slider.Root
+                  className="relative mt-3 flex h-4 w-full touch-none items-center select-none"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={[heatmapIntensity]}
+                  onValueChange={([v]) => onHeatmapIntensityChange(v)}
+                  aria-label="Intensité du heatmap"
+                >
+                  <Slider.Track className="relative h-1.5 grow rounded-full bg-muted">
+                    <Slider.Range className="absolute h-full rounded-full bg-accent" />
+                  </Slider.Track>
+                  <Slider.Thumb className="block size-4 rounded-full border-2 border-accent bg-background shadow transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                </Slider.Root>
+              </div>
+            </AccordionSection>
+          )}
 
           <AccordionSection value="fond" title="Fond de carte">
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
