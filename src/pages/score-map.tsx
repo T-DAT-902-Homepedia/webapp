@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { GeoJsonLayer, ScatterplotLayer, type Layer } from "deck.gl"
 import type { MapViewState, PickingInfo } from "@deck.gl/core"
 import { MapboxOverlay } from "@deck.gl/mapbox"
@@ -23,6 +24,29 @@ import { makeDivergingScale, makeSequentialScale } from "@/lib/scoreColors"
 import { ScoreSidebar, type Basemap, type MapView } from "@/components/score-sidebar"
 import { loadWordCloud, type CityWordCloud } from "@/lib/parseAvis"
 import WordCloudPopup from "@/components/WordCloudPopup"
+import { CommunePanel } from "@/components/commune-panel"
+
+// Centre (bbox) d'une géométrie GeoJSON, pour recentrer sur une commune au
+// deep-link. Parcourt récursivement les coordonnées (Polygon / MultiPolygon).
+function geometryCenter(geom: ScoreFeature["geometry"]): [number, number] {
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity
+  const visit = (c: unknown): void => {
+    if (Array.isArray(c) && typeof c[0] === "number") {
+      const [x, y] = c as [number, number]
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
+    } else if (Array.isArray(c)) {
+      c.forEach(visit)
+    }
+  }
+  visit((geom as { coordinates: unknown }).coordinates)
+  return [(minX + maxX) / 2, (minY + maxY) / 2]
+}
 
 const INITIAL_VIEW_STATE: MapViewState = {
   longitude: 2.4,
@@ -120,6 +144,44 @@ export default function ScoreMap() {
     enabled: wordCloudEnabled,
   })
 
+  // Commune sélectionnée = source de vérité dans l'URL (?commune=<code>), pour un
+  // deep-link partageable et rechargeable.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedCode = searchParams.get("commune")
+  const selected = useMemo(
+    () =>
+      selectedCode
+        ? (data?.features.find(
+            (f) => f.properties.code_commune === selectedCode,
+          ) ?? null)
+        : null,
+    [data, selectedCode],
+  )
+
+  const selectCommune = (code: string) => setSearchParams({ commune: code })
+  const closePanel = () => setSearchParams({})
+
+  // Échap ferme le panneau.
+  useEffect(() => {
+    if (!selectedCode) return
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closePanel()
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCode])
+
+  // Deep-link : au 1er chargement des données, si l'URL cible une commune, on
+  // recentre dessus. Ne se redéclenche pas aux clics suivants (dep [data]).
+  const didDeepLinkCenter = useRef(false)
+  useEffect(() => {
+    if (!data || didDeepLinkCenter.current) return
+    didDeepLinkCenter.current = true
+    if (selected) {
+      mapRef.current?.flyTo({ center: geometryCenter(selected.geometry), zoom: 11, duration: 0 })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+
   const diverging = DIVERGING_METRICS.has(metric)
 
   // Échelle recalculée quand la métrique ou les données changent.
@@ -143,12 +205,28 @@ export default function ScoreMap() {
       lineWidthMinPixels: 0.5,
       pickable: true,
       onHover: (info) => setHovered((info.object as ScoreFeature) ?? null),
+      onClick: (info) =>
+        info.object &&
+        selectCommune((info.object as ScoreFeature).properties.code_commune),
       // metric + scale doivent déclencher le recalcul des couleurs (sinon
       // deck.gl garde l'ancienne palette en cache).
       updateTriggers: { getFillColor: [scale, metric] },
     })
 
-    if (!wordCloudEnabled || !cities) return [choropleth]
+    // Contour de la commune sélectionnée, au-dessus (ambre, visible sur tout fond).
+    const highlight = new GeoJsonLayer({
+      id: "score-selected",
+      data: selected
+        ? { type: "FeatureCollection" as const, features: [selected] }
+        : EMPTY_COLLECTION,
+      filled: false,
+      stroked: true,
+      getLineColor: [245, 158, 11, 255],
+      lineWidthMinPixels: 3,
+      pickable: false,
+    })
+
+    if (!wordCloudEnabled || !cities) return [choropleth, highlight]
 
     const wordCloudLayer = new ScatterplotLayer<CityWordCloud>({
       id: "wordcloud-cities",
@@ -164,8 +242,8 @@ export default function ScoreMap() {
       onClick: (info: PickingInfo) =>
         setSelectedCity((info.object as CityWordCloud) ?? null),
     })
-    return [choropleth, wordCloudLayer]
-  }, [data, scale, metric, opacity, fillBeforeId, wordCloudEnabled, cities])
+    return [choropleth, highlight, wordCloudLayer]
+  }, [data, scale, metric, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
 
   const hoveredValue = hovered?.properties[metric]
 
@@ -259,6 +337,9 @@ export default function ScoreMap() {
           <WordCloudPopup city={selectedCity} onClose={() => setSelectedCity(null)} />
         )}
       </div>
+
+      {/* Panneau de détail de la commune sélectionnée (clic) */}
+      {selected && <CommunePanel feature={selected} onClose={closePanel} />}
     </div>
   )
 }
