@@ -1,3 +1,4 @@
+import type { Geometry } from "geojson"
 import { z } from "zod"
 
 // Score territoire : GeoJSON statique exporté depuis le gold duckpipe (GCS) et
@@ -40,46 +41,45 @@ export const METRIC_LABELS: Record<Metric, string> = {
 // le reste est dans [0, 1] -> échelle séquentielle.
 export const DIVERGING_METRICS: ReadonlySet<Metric> = new Set(["gap_pondere"])
 
-// --- Schéma zod ---------------------------------------------------------------
+// --- Types ---------------------------------------------------------------------
+// Les properties ne sont PAS validées au runtime (cf. fetchScore) : plutôt qu'un
+// schéma zod jamais parsé, on décrit la forme en types TS. Les 12 dimensions
+// `n_*` (chiffre normalisé 0–1) sont dérivées de DIMENSIONS.
 
-const scoreProperties = z.object({
-  code_commune: z.string(),
-  nom: z.string().nullable().optional(),
-  dep: z.string().nullable().optional(),
-  prix: z.number().nullable().optional(),
-  nb_transactions: z.number().nullable().optional(),
-  dpe: z.string().nullable().optional(),
-  score_valeur: z.number().nullable(),
-  gap: z.number().nullable().optional(),
-  gap_pondere: z.number().nullable(),
-  n_transport: z.number().nullable(),
-  n_securite: z.number().nullable(),
-  n_tourisme: z.number().nullable(),
-  n_emploi: z.number().nullable(),
-  n_risques: z.number().nullable(),
-  n_dpe: z.number().nullable(),
-  n_services: z.number().nullable(),
-  n_loisirs: z.number().nullable(),
-  n_ensoleillement: z.number().nullable(),
-  n_proximite: z.number().nullable(),
-  n_access_fin: z.number().nullable(),
-  n_prix: z.number().nullable(),
-})
+type NumOrNull = number | null
 
-const scoreCollection = z.object({
+export type ScoreProperties = {
+  code_commune: string
+  nom?: string | null
+  dep?: string | null
+  prix?: NumOrNull
+  nb_transactions?: NumOrNull
+  dpe?: string | null
+  score_valeur: NumOrNull
+  gap?: NumOrNull
+  gap_pondere: NumOrNull
+} & Record<(typeof DIMENSIONS)[number], NumOrNull>
+
+export type ScoreFeature = {
+  type: "Feature"
+  geometry: Geometry // GeoJSON — consommé tel quel par deck.gl.
+  properties: ScoreProperties
+}
+
+export type ScoreCollection = {
+  type: "FeatureCollection"
+  features: ScoreFeature[]
+}
+
+// On valide seulement la FORME de l'enveloppe (pas chaque feature) : valider
+// ~18k features × ~20 champs bloquerait le thread principal plusieurs secondes,
+// et un seul enregistrement fautif ferait échouer TOUTE la carte. La source est
+// notre propre export contrôlé : une propriété manquante dégrade en "no data"
+// pour la commune concernée (getFillColor -> NO_DATA), pas en crash global.
+const scoreEnvelope = z.object({
   type: z.literal("FeatureCollection"),
-  features: z.array(
-    z.object({
-      type: z.literal("Feature"),
-      geometry: z.any(), // GeoJSON — consommé tel quel par deck.gl.
-      properties: scoreProperties,
-    }),
-  ),
+  features: z.array(z.unknown()),
 })
-
-export type ScoreCollection = z.infer<typeof scoreCollection>
-export type ScoreFeature = ScoreCollection["features"][number]
-export type ScoreProperties = z.infer<typeof scoreProperties>
 
 /** Charge le GeoJSON statique (géométrie + toutes les métriques, un seul fetch). */
 export async function fetchScore(): Promise<ScoreCollection> {
@@ -87,5 +87,7 @@ export async function fetchScore(): Promise<ScoreCollection> {
   if (!res.ok) {
     throw new Error(`score.geojson -> ${res.status} ${res.statusText}`)
   }
-  return scoreCollection.parse(await res.json())
+  const json = await res.json()
+  scoreEnvelope.parse(json) // vérifie type + features:[] sans parcourir chaque feature
+  return json as ScoreCollection
 }

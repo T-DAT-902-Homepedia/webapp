@@ -1,4 +1,4 @@
-import type { RGBA } from "@/lib/colorScale"
+import { quantileScale, type RGBA } from "@/lib/colorScale"
 
 const NO_DATA: RGBA = [200, 200, 200, 60]
 
@@ -18,27 +18,10 @@ const SEQ_PALETTE: RGBA[] = [
 /** Échelle séquentielle par quantiles sur des valeurs 0–1 (score, dimensions).
  *
  * Quantiles rang-based (robustes aux distributions resserrées des dimensions
- * normalisées) calculés sur les valeurs non nulles. Les NULL -> gris "no data".
+ * normalisées) via le helper partagé `quantileScale`. Les NULL -> gris "no data".
  */
 export function makeSequentialScale(values: (number | null | undefined)[]) {
-  const sorted = values
-    .filter((v): v is number => v != null)
-    .sort((a, b) => a - b)
-
-  const thresholds: number[] = []
-  if (sorted.length > 1) {
-    for (let i = 1; i < SEQ_PALETTE.length; i++) {
-      const q = i / SEQ_PALETTE.length
-      thresholds.push(sorted[Math.floor(q * (sorted.length - 1))])
-    }
-  }
-
-  return function color(v: number | null | undefined): RGBA {
-    if (v == null) return NO_DATA
-    let cls = 0
-    while (cls < thresholds.length && v > thresholds[cls]) cls++
-    return SEQ_PALETTE[cls]
-  }
+  return quantileScale(values, SEQ_PALETTE, NO_DATA)
 }
 
 // --- Divergent (gap_pondere, centré sur 0) -------------------------------------
