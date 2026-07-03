@@ -1,6 +1,7 @@
 @import "@fontsource-variable/dm-sans";
 @import "@fontsource-variable/syne";
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 

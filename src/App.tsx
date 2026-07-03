@@ -10,7 +10,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/carte" element={<DvfMap />} />
-        <Route path="/score" element={<ScoreMap />} />
+        <Route path="/map" element={<ScoreMap />} />
       </Routes>
     </BrowserRouter>
   )

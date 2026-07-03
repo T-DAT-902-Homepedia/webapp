@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react"
-import DeckGL from "@deck.gl/react"
-import { GeoJsonLayer } from "deck.gl"
+import { GeoJsonLayer, type Layer } from "deck.gl"
 import type { MapViewState } from "@deck.gl/core"
-import Map from "react-map-gl/maplibre"
+import { MapboxOverlay } from "@deck.gl/mapbox"
+import Map, { useControl } from "react-map-gl/maplibre"
+import type {
+  IControl,
+  Map as MaplibreMap,
+  StyleSpecification,
+} from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { ArrowLeft } from "lucide-react"
-import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 
-import { Button } from "@/components/ui/button"
 import {
   DIMENSIONS,
   DIVERGING_METRICS,
@@ -17,12 +19,8 @@ import {
   type Metric,
   type ScoreFeature,
 } from "@/lib/score"
-import {
-  DIV_LEGEND,
-  makeDivergingScale,
-  makeSequentialScale,
-  SEQ_LEGEND,
-} from "@/lib/scoreColors"
+import { makeDivergingScale, makeSequentialScale } from "@/lib/scoreColors"
+import { ScoreSidebar, type Basemap } from "@/components/score-sidebar"
 
 const INITIAL_VIEW_STATE: MapViewState = {
   longitude: 2.4,
@@ -37,6 +35,42 @@ const EMPTY_COLLECTION = { type: "FeatureCollection" as const, features: [] }
 // Ordre du sélecteur : score global, écart qualité/prix, puis les 12 dimensions.
 const METRICS: Metric[] = ["score_valeur", "gap_pondere", ...DIMENSIONS]
 
+// Imagerie aérienne Esri (raster, sans clé) pour le fond « Satellite ».
+const SATELLITE_STYLE: StyleSpecification = {
+  version: 8,
+  glyphs:
+    "https://basemaps.cartocdn.com/gl/positron-gl-style/{fontstack}/{range}.pbf",
+  sources: {
+    "esri-imagery": {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      attribution:
+        "Tuiles © Esri — Source : Esri, Maxar, Earthstar Geographics, GIS User Community",
+    },
+  },
+  layers: [{ id: "esri-imagery", type: "raster", source: "esri-imagery" }],
+}
+
+// Fonds de carte : Carto (vecteur, schéma OpenMapTiles -> labels FR) + satellite.
+const BASEMAP_STYLES: Record<Basemap, string | StyleSpecification> = {
+  clair: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  sombre: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+  couleur: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+  satellite: SATELLITE_STYLE,
+}
+
+// Libellés en français : on remplace le champ texte des calques de symboles par
+// le nom FR de la tuile vectorielle (fallback latin puis nom par défaut).
+const FR_LABEL = [
+  "coalesce",
+  ["get", "name:fr"],
+  ["get", "name:latin"],
+  ["get", "name"],
+]
+
 /** Formate une valeur de métrique pour l'affichage (gap signé, reste en 0–1). */
 function fmt(metric: Metric, v: number | null | undefined): string {
   if (v == null) return "—"
@@ -44,9 +78,22 @@ function fmt(metric: Metric, v: number | null | undefined): string {
   return v.toFixed(2)
 }
 
+/** Overlay deck.gl interleavé : les couches s'insèrent DANS la pile maplibre
+ *  (via beforeId), donc sous les labels du fond de carte qui restent lisibles. */
+function DeckOverlay({ layers }: { layers: Layer[] }) {
+  const overlay = useControl(
+    () => new MapboxOverlay({ interleaved: true, layers }) as unknown as IControl,
+  )
+  ;(overlay as unknown as MapboxOverlay).setProps({ layers })
+  return null
+}
+
 export default function ScoreMap() {
   const [hovered, setHovered] = useState<ScoreFeature | null>(null)
   const [metric, setMetric] = useState<Metric>("score_valeur")
+  const [opacity, setOpacity] = useState(0.8)
+  const [basemap, setBasemap] = useState<Basemap>("clair")
+  const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["score"],
@@ -62,127 +109,105 @@ export default function ScoreMap() {
     return diverging ? makeDivergingScale(values) : makeSequentialScale(values)
   }, [data, metric, diverging])
 
-  const layer = useMemo(
-    () =>
-      new GeoJsonLayer<ScoreFeature["properties"]>({
-        id: "score-choropleth",
-        data: data ?? EMPTY_COLLECTION,
-        filled: true,
-        stroked: true,
-        opacity: 0.8,
-        getFillColor: (f) => scale((f as ScoreFeature).properties[metric]),
-        getLineColor: [255, 255, 255, 120],
-        lineWidthMinPixels: 0.5,
-        pickable: true,
-        onHover: (info) => setHovered((info.object as ScoreFeature) ?? null),
-        // metric + scale doivent déclencher le recalcul des couleurs (sinon
-        // deck.gl garde l'ancienne palette en cache).
-        updateTriggers: { getFillColor: [scale, metric] },
-      }),
-    [data, scale, metric],
-  )
+  const layers = useMemo(() => {
+    const choropleth = new GeoJsonLayer<ScoreFeature["properties"]>({
+      id: "score-choropleth",
+      data: data ?? EMPTY_COLLECTION,
+      // beforeId glisse la couche sous les labels (prop runtime de @deck.gl/mapbox,
+      // non typée en v8) ; spread conditionnel pour éviter l'erreur de type.
+      ...(fillBeforeId ? { beforeId: fillBeforeId } : {}),
+      filled: true,
+      stroked: true,
+      opacity,
+      getFillColor: (f) => scale((f as ScoreFeature).properties[metric]),
+      getLineColor: [255, 255, 255, 120],
+      lineWidthMinPixels: 0.5,
+      pickable: true,
+      onHover: (info) => setHovered((info.object as ScoreFeature) ?? null),
+      // metric + scale doivent déclencher le recalcul des couleurs (sinon
+      // deck.gl garde l'ancienne palette en cache).
+      updateTriggers: { getFillColor: [scale, metric] },
+    })
+    return [choropleth]
+  }, [data, scale, metric, opacity, fillBeforeId])
 
-  const legend = diverging ? DIV_LEGEND : SEQ_LEGEND
   const hoveredValue = hovered?.properties[metric]
 
+  // À chaque (re)chargement de style — initial OU changement de fond — repasse les
+  // labels en français et mémorise le 1er calque de symboles (beforeId). Le
+  // satellite (raster, sans symbole) court-circuite : pas de FR, couche au-dessus.
+  function syncMapStyle(map: MaplibreMap) {
+    const styleLayers = map.getStyle()?.layers ?? []
+    const symbols = styleLayers.filter((l) => l.type === "symbol")
+    if (symbols.length === 0) {
+      setFillBeforeId(undefined)
+      return
+    }
+    const fr = JSON.stringify(FR_LABEL)
+    // Idempotent : on ne réécrit que si un libellé n'est pas déjà en FR, sinon
+    // nos setLayoutProperty re-déclencheraient styledata en boucle.
+    const needsFr = symbols.some((l) => {
+      const tf = map.getLayoutProperty(l.id, "text-field")
+      return tf != null && JSON.stringify(tf) !== fr
+    })
+    if (needsFr) {
+      for (const layer of symbols) {
+        if (map.getLayoutProperty(layer.id, "text-field") == null) continue
+        map.setLayoutProperty(layer.id, "text-field", FR_LABEL)
+      }
+    }
+    setFillBeforeId(symbols[0]?.id)
+  }
+
   return (
-    <div className="relative h-svh w-svw overflow-hidden bg-background text-foreground">
-      <DeckGL
-        initialViewState={INITIAL_VIEW_STATE}
-        controller
-        layers={[layer]}
-        style={{ width: "100%", height: "100%" }}
-      >
-        <Map mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json" />
-      </DeckGL>
+    <div className="flex h-svh w-svw overflow-hidden bg-background text-foreground">
+      <ScoreSidebar
+        metrics={METRICS}
+        metric={metric}
+        onMetric={setMetric}
+        diverging={diverging}
+        opacity={opacity}
+        onOpacity={setOpacity}
+        basemap={basemap}
+        onBasemap={setBasemap}
+        isLoading={isLoading}
+        isError={isError}
+      />
 
-      {/* Panneau de contrôle */}
-      <div className="absolute top-4 left-4 w-64 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/" aria-label="Retour à l'accueil">
-              <ArrowLeft className="size-4" />
-            </Link>
-          </Button>
-          <span className="font-display text-lg font-bold tracking-tight">
-            Homepedia<span className="text-accent">.</span>
-          </span>
-        </div>
-
-        <div className="mt-3 text-sm font-semibold">Score territoire</div>
-        <label className="mt-2 block text-xs text-muted-foreground" htmlFor="metric">
-          Métrique affichée
-        </label>
-        <select
-          id="metric"
-          className="mt-1 w-full rounded-md border bg-background px-2 py-1.5 text-sm"
-          value={metric}
-          onChange={(e) => setMetric(e.target.value as Metric)}
+      <div className="relative flex-1">
+        <Map
+          initialViewState={INITIAL_VIEW_STATE}
+          mapStyle={BASEMAP_STYLES[basemap]}
+          // Rechargement complet au changement de fond (les styles Carto partagent
+          // les mêmes ids ; le diff laisserait des libellés anglais résiduels).
+          styleDiffing={false}
+          onStyleData={(e) => syncMapStyle(e.target)}
+          style={{ width: "100%", height: "100%" }}
         >
-          {METRICS.map((m) => (
-            <option key={m} value={m}>
-              {METRIC_LABELS[m]}
-            </option>
-          ))}
-        </select>
+          <DeckOverlay layers={layers} />
+        </Map>
 
-        {/* Légende du dégradé */}
-        <div className="mt-3">
-          <div className="flex h-2 overflow-hidden rounded-sm">
-            {legend.map((c, i) => (
-              <div
-                key={i}
-                className="flex-1"
-                style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
-              />
-            ))}
-          </div>
-          <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-            {diverging ? (
-              <>
-                <span>Cher</span>
-                <span>Neutre</span>
-                <span>Bon rapport</span>
-              </>
-            ) : (
-              <>
-                <span>Faible</span>
-                <span>Élevé</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {isLoading && (
-          <div className="mt-2 text-xs text-muted-foreground">Chargement…</div>
-        )}
-        {isError && (
-          <div className="mt-2 text-xs text-destructive">
-            Données indisponibles
+        {/* Tooltip au survol */}
+        {hovered && (
+          <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
+            <div className="font-display font-semibold">
+              {hovered.properties.nom ?? hovered.properties.code_commune}
+              {hovered.properties.dep ? ` (${hovered.properties.dep})` : ""}
+            </div>
+            <div className="mt-1">
+              {METRIC_LABELS[metric]} :{" "}
+              <span className="font-semibold text-accent">
+                {fmt(metric, hoveredValue)}
+              </span>
+            </div>
+            <div className="text-muted-foreground">
+              {hovered.properties.prix != null
+                ? `${Math.round(hovered.properties.prix).toLocaleString("fr-FR")} €/m²`
+                : "prix n/d"}
+            </div>
           </div>
         )}
       </div>
-
-      {/* Tooltip au survol */}
-      {hovered && (
-        <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
-          <div className="font-display font-semibold">
-            {hovered.properties.nom ?? hovered.properties.code_commune}
-            {hovered.properties.dep ? ` (${hovered.properties.dep})` : ""}
-          </div>
-          <div className="mt-1">
-            {METRIC_LABELS[metric]} :{" "}
-            <span className="font-semibold text-accent">
-              {fmt(metric, hoveredValue)}
-            </span>
-          </div>
-          <div className="text-muted-foreground">
-            {hovered.properties.prix != null
-              ? `${Math.round(hovered.properties.prix).toLocaleString("fr-FR")} €/m²`
-              : "prix n/d"}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

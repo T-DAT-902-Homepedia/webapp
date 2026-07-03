@@ -51,7 +51,7 @@ export function Landing() {
               className="bg-accent text-accent-foreground hover:bg-accent/90"
               asChild
             >
-              <Link to="/carte">
+              <Link to="/map">
                 Explorer la carte
                 <ArrowRight className="size-4" />
               </Link>
@@ -92,7 +92,7 @@ export function Landing() {
               className="bg-accent text-accent-foreground hover:bg-accent/90"
               asChild
             >
-              <Link to="/carte">
+              <Link to="/map">
                 Explorer la carte
                 <ArrowRight className="size-4" />
               </Link>

@@ -38,6 +38,31 @@ export const METRIC_LABELS: Record<Metric, string> = {
   n_prix: "Prix",
 }
 
+// Explications FR affichées derrière le « i » de chaque métrique dans la sidebar.
+export const METRIC_INFO: Record<Metric, string> = {
+  score_valeur:
+    "Note globale de 0 à 1 agrégeant toutes les dimensions, pondérées par leur importance.",
+  gap_pondere:
+    "Écart entre la qualité du territoire et son prix. Positif = bon rapport qualité/prix, négatif = cher pour ce qu'offre la commune.",
+  n_transport:
+    "Desserte en transports : densité d'arrêts et accès au réseau. Élevé = bien desservi.",
+  n_securite:
+    "Niveau de sécurité, à partir de la délinquance rapportée à la population. Élevé = plus sûr.",
+  n_tourisme:
+    "Attractivité touristique : sites, hébergements et fréquentation.",
+  n_emploi: "Dynamisme de l'emploi et du bassin économique local.",
+  n_risques:
+    "Exposition aux risques naturels et technologiques (inondation, industriel…). Élevé = faible exposition.",
+  n_dpe: "Performance énergétique moyenne du parc de logements (DPE). Élevé = plus économe.",
+  n_services: "Présence de services et de commerces de proximité.",
+  n_loisirs: "Offre de loisirs, culture et équipements sportifs.",
+  n_ensoleillement: "Ensoleillement annuel de la commune.",
+  n_proximite: "Proximité des pôles et des équipements du quotidien.",
+  n_access_fin:
+    "Accessibilité financière du logement au regard des revenus locaux. Élevé = plus abordable.",
+  n_prix: "Niveau de prix de l'immobilier (normalisé). Élevé = plus abordable.",
+}
+
 // gap_pondere est centré sur 0 (peut être négatif) -> échelle divergente ; tout
 // le reste est dans [0, 1] -> échelle séquentielle.
 export const DIVERGING_METRICS: ReadonlySet<Metric> = new Set(["gap_pondere"])
