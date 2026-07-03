@@ -3,6 +3,7 @@ import { X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { ScoreFeature } from "@/lib/score"
+import { ScoreRadar } from "@/components/score-radar"
 
 /** Petite tuile d'indicateur. */
 function Stat({ label, value }: { label: string; value: ReactNode }) {
@@ -61,6 +62,11 @@ export function CommunePanel({
         <Stat label="Écart qualité/prix" value={gap} />
         <Stat label="DPE dominant" value={p.dpe ?? "n/d"} />
         <Stat label="Transactions" value={p.nb_transactions ?? "n/d"} />
+      </div>
+
+      <div className="border-t px-4 py-4">
+        <div className="mb-1 text-xs font-semibold">Profil (12 dimensions)</div>
+        <ScoreRadar props={p} />
       </div>
     </aside>
   )
