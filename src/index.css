@@ -144,6 +144,20 @@
     --color-blue-light: oklch(0.96 0.022 265);
     --color-green: oklch(0.74 0.16 165);
     --color-warm: oklch(0.73 0.165 55);
+
+    --animate-map-ping: map-ping 2.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+
+    @keyframes map-ping {
+        0% {
+            transform: scale(1);
+            opacity: 0.5;
+        }
+        70%,
+        100% {
+            transform: scale(3.5);
+            opacity: 0;
+        }
+    }
 }
 
 @layer base {
