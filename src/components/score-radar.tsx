@@ -13,9 +13,9 @@ const pt = (i: number, v: number): [number, number] => [
   CY + Math.sin(angle(i)) * R * v,
 ]
 
-export function ScoreRadar({ props }: { props: ScoreProperties }) {
+export function ScoreRadar({ properties }: { properties: ScoreProperties }) {
   const vals = DIMENSIONS.map((d) => {
-    const v = props[d]
+    const v = properties[d]
     return typeof v === "number" ? Math.max(0, Math.min(1, v)) : 0
   })
   const polygon = vals.map((v, i) => pt(i, v).join(",")).join(" ")
