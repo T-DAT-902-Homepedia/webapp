@@ -22,6 +22,15 @@ const BASEMAP_KEYS = Object.keys(BASEMAP_LABELS) as Basemap[]
 
 export type MapView = { center: [number, number]; zoom: number }
 
+// Types de visualisation de la carte. Ajouter un type = une entrée ici + un
+// layer dans score-map.tsx (socle pour hexbin #12 et points #13).
+export type MapViz = "choropleth" | "heatmap"
+const VIZ_LABELS: Record<MapViz, string> = {
+  choropleth: "Choroplèthe",
+  heatmap: "Chaleur",
+}
+const VIZ_KEYS = Object.keys(VIZ_LABELS) as MapViz[]
+
 // Points de recentrage : France métropolitaine + les 5 DROM (éloignés, non
 // visibles au zoom métropole -> on y accède par flyTo).
 const CENTERS: { label: string; view: MapView }[] = [
@@ -43,6 +52,8 @@ type ScoreSidebarProps = {
   basemap: Basemap
   onBasemap: (b: Basemap) => void
   onCenter: (view: MapView) => void
+  viz: MapViz
+  onViz: (v: MapViz) => void
   bivariate: boolean
   onBivariate: (v: boolean) => void
   metricY: Metric
@@ -116,6 +127,8 @@ export function ScoreSidebar({
   basemap,
   onBasemap,
   onCenter,
+  viz,
+  onViz,
   bivariate,
   onBivariate,
   metricY,
@@ -125,7 +138,8 @@ export function ScoreSidebar({
   wordCloudEnabled,
   onWordCloudEnabled,
 }: ScoreSidebarProps) {
-  const legend = diverging ? DIV_LEGEND : SEQ_LEGEND
+  // La heatmap rend toujours avec la rampe séquentielle (cf. colorRange côté carte).
+  const legend = viz === "heatmap" || !diverging ? SEQ_LEGEND : DIV_LEGEND
 
   return (
     <Tooltip.Provider>
@@ -177,7 +191,36 @@ export function ScoreSidebar({
             })}
           </div>
 
+          {/* Type de visualisation : chaque type déclare ses options (le bivarié
+              n'existe qu'en choroplèthe). */}
+          <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+            <span>Type de carte</span>
+            <InfoTip
+              label="Type de carte"
+              text="Choroplèthe : chaque commune colorée selon sa valeur. Chaleur : intensité lissée à partir du centre des communes, pondérée par la métrique."
+            />
+          </div>
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+            {VIZ_KEYS.map((v) => (
+              <Button
+                key={v}
+                size="sm"
+                variant={v === viz ? "default" : "outline"}
+                className={
+                  v === viz
+                    ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                    : undefined
+                }
+                onClick={() => onViz(v)}
+              >
+                {VIZ_LABELS[v]}
+              </Button>
+            ))}
+          </div>
+
           {/* Mode bivarié : croise la métrique courante avec une seconde. */}
+          {viz === "choropleth" && (
+          <>
           <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
             <Checkbox.Root
               checked={bivariate}
@@ -208,9 +251,11 @@ export function ScoreSidebar({
               ))}
             </select>
           )}
+          </>
+          )}
 
-          {/* Légende : matrice 3×3 en bivarié, dégradé sinon. */}
-          {bivariate ? (
+          {/* Légende : matrice 3×3 en bivarié (choroplèthe), dégradé sinon. */}
+          {viz === "choropleth" && bivariate ? (
             <div className="mt-3 flex items-end gap-2.5">
               {/* Lignes du haut vers le bas = classe y décroissante (élevé en haut). */}
               <div className="flex flex-col gap-px">
@@ -246,7 +291,7 @@ export function ScoreSidebar({
                 ))}
               </div>
               <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-                {diverging ? (
+                {diverging && viz !== "heatmap" ? (
                   <>
                     <span>Cher</span>
                     <span>Neutre</span>

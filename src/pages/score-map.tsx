@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { GeoJsonLayer, ScatterplotLayer, type Layer } from "deck.gl"
+import { GeoJsonLayer, HeatmapLayer, ScatterplotLayer, type Layer } from "deck.gl"
 import type { MapViewState, PickingInfo } from "@deck.gl/core"
 import { MapboxOverlay } from "@deck.gl/mapbox"
 import Map, { useControl, type MapRef } from "react-map-gl/maplibre"
@@ -25,8 +25,14 @@ import {
   makeBivariateScale,
   makeDivergingScale,
   makeSequentialScale,
+  SEQ_LEGEND,
 } from "@/lib/scoreColors"
-import { ScoreSidebar, type Basemap, type MapView } from "@/components/score-sidebar"
+import {
+  ScoreSidebar,
+  type Basemap,
+  type MapView,
+  type MapViz,
+} from "@/components/score-sidebar"
 import { loadWordCloud, type CityWordCloud } from "@/lib/parseAvis"
 import WordCloudPopup from "@/components/WordCloudPopup"
 import { CommunePanel } from "@/components/commune-panel"
@@ -68,6 +74,17 @@ const EMPTY_COLLECTION = { type: "FeatureCollection" as const, features: [] }
 
 // Ordre du sélecteur : score global, écart qualité/prix, puis les 12 dimensions.
 const METRICS: Metric[] = ["score_valeur", "gap_pondere", ...DIMENSIONS]
+
+// Rampe heatmap : mêmes couleurs que la légende séquentielle, mais alpha
+// croissant — les faibles densités s'estompent au lieu de voiler la carte.
+const HEAT_COLOR_RANGE = SEQ_LEGEND.map(
+  ([r, g, b], i): [number, number, number, number] => [
+    r,
+    g,
+    b,
+    Math.round((i / (SEQ_LEGEND.length - 1)) * 255),
+  ],
+)
 
 // Imagerie aérienne Esri (raster, sans clé) pour le fond « Satellite ».
 const SATELLITE_STYLE: StyleSpecification = {
@@ -125,6 +142,8 @@ function DeckOverlay({ layers }: { layers: Layer[] }) {
 export default function ScoreMap() {
   const [hovered, setHovered] = useState<ScoreFeature | null>(null)
   const [metric, setMetric] = useState<Metric>("score_valeur")
+  // Type de visualisation (choroplèthe / heatmap) — choix explicite, cf. #32.
+  const [viz, setViz] = useState<MapViz>("choropleth")
   // Mode bivarié : croise `metric` (axe x) avec `metricY` (axe y) sur 3×3 classes.
   const [bivariate, setBivariate] = useState(false)
   const [metricY, setMetricY] = useState<Metric>("n_prix")
@@ -198,17 +217,36 @@ export default function ScoreMap() {
     return diverging ? makeDivergingScale(values) : makeSequentialScale(values)
   }, [data, metric, diverging])
 
-  // Échelle bivariée (terciles sur chaque axe), seulement en mode bivarié.
+  // Échelle bivariée (terciles sur chaque axe) — seulement en choroplèthe bivarié.
   const bivarScale = useMemo(() => {
-    if (!bivariate) return null
+    if (!bivariate || viz !== "choropleth") return null
     const fs = data?.features ?? []
     return makeBivariateScale(
       fs.map((f) => f.properties[metric]),
       fs.map((f) => f.properties[metricY]),
     )
-  }, [data, bivariate, metric, metricY])
+  }, [data, bivariate, viz, metric, metricY])
+
+  // Centres (bbox) des communes, calculés une fois par jeu de données :
+  // positions des points de la heatmap.
+  const centers = useMemo(
+    () => (data?.features ?? []).map((f) => geometryCenter(f.geometry)),
+    [data],
+  )
+
+  // Points pondérés de la heatmap. gap_pondere peut être négatif : clampé à 0
+  // (la chaleur ne montre alors que les bons rapports qualité/prix).
+  const heatPoints = useMemo(() => {
+    if (viz !== "heatmap") return []
+    return (data?.features ?? []).map((f, i) => ({
+      position: centers[i],
+      weight: Math.max(0, f.properties[metric] ?? 0),
+    }))
+  }, [viz, data, centers, metric])
 
   const layers = useMemo(() => {
+    // En heatmap, cette couche devient invisible mais reste pickable : elle
+    // continue de porter le survol (tooltip) et le clic (panneau commune).
     const choropleth = new GeoJsonLayer<ScoreFeature["properties"]>({
       id: "score-choropleth",
       data: data ?? EMPTY_COLLECTION,
@@ -216,9 +254,10 @@ export default function ScoreMap() {
       // non typée en v8) ; spread conditionnel pour éviter l'erreur de type.
       ...(fillBeforeId ? { beforeId: fillBeforeId } : {}),
       filled: true,
-      stroked: true,
+      stroked: viz !== "heatmap",
       opacity,
       getFillColor: (f) => {
+        if (viz === "heatmap") return [0, 0, 0, 0]
         const p = (f as ScoreFeature).properties
         return bivarScale
           ? bivarScale.color(p[metric], p[metricY])
@@ -233,8 +272,25 @@ export default function ScoreMap() {
         selectCommune((info.object as ScoreFeature).properties.code_commune),
       // metric + scale doivent déclencher le recalcul des couleurs (sinon
       // deck.gl garde l'ancienne palette en cache).
-      updateTriggers: { getFillColor: [scale, bivarScale, metric, metricY] },
+      updateTriggers: { getFillColor: [scale, bivarScale, metric, metricY, viz] },
     })
+
+    // Heatmap : un point pondéré par commune, rampe = celle de la légende.
+    // ponytail: rayon fixe 40px, sliders rayon/intensité si le besoin se confirme (#29).
+    const heat =
+      viz === "heatmap"
+        ? [
+            new HeatmapLayer<{ position: [number, number]; weight: number }>({
+              id: "score-heatmap",
+              data: heatPoints,
+              getPosition: (d) => d.position,
+              getWeight: (d) => d.weight,
+              radiusPixels: 40,
+              colorRange: HEAT_COLOR_RANGE,
+              opacity,
+            }),
+          ]
+        : []
 
     // Contour de la commune sélectionnée, au-dessus (ambre, visible sur tout fond).
     const highlight = new GeoJsonLayer({
@@ -249,7 +305,7 @@ export default function ScoreMap() {
       pickable: false,
     })
 
-    if (!wordCloudEnabled || !cities) return [choropleth, highlight]
+    if (!wordCloudEnabled || !cities) return [...heat, choropleth, highlight]
 
     const wordCloudLayer = new ScatterplotLayer<CityWordCloud>({
       id: "wordcloud-cities",
@@ -265,8 +321,8 @@ export default function ScoreMap() {
       onClick: (info: PickingInfo) =>
         setSelectedCity((info.object as CityWordCloud) ?? null),
     })
-    return [choropleth, highlight, wordCloudLayer]
-  }, [data, scale, bivarScale, metric, metricY, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
+    return [...heat, choropleth, highlight, wordCloudLayer]
+  }, [data, scale, bivarScale, viz, heatPoints, metric, metricY, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
 
   const hoveredValue = hovered?.properties[metric]
   // Classes bivariées de la commune survolée, pour la ligne « Classe » du tooltip.
@@ -313,6 +369,8 @@ export default function ScoreMap() {
         basemap={basemap}
         onBasemap={setBasemap}
         onCenter={centerOn}
+        viz={viz}
+        onViz={setViz}
         bivariate={bivariate}
         onBivariate={setBivariate}
         metricY={metricY}
@@ -351,7 +409,7 @@ export default function ScoreMap() {
                 {fmt(metric, hoveredValue)}
               </span>
             </div>
-            {bivariate && (
+            {bivarScale && (
               <div>
                 {METRIC_LABELS[metricY]} :{" "}
                 <span className="font-semibold text-accent">
