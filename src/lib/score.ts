@@ -20,6 +20,19 @@ export const DIMENSIONS = [
 
 export type Metric = "score_valeur" | "gap_pondere" | (typeof DIMENSIONS)[number]
 
+export type Dimension = (typeof DIMENSIONS)[number]
+
+// Les 12 dimensions regroupées par source de données du sujet : les 5 axes du
+// radar de la fiche commune (1 axe = 1 des 5 types de données de la
+// problématique — immobilier, transport, climat/risques, tourisme, socio).
+export const SOURCE_GROUPS: { label: string; dims: Dimension[] }[] = [
+  { label: "Immobilier", dims: ["n_prix", "n_access_fin"] },
+  { label: "Transport", dims: ["n_transport", "n_proximite"] },
+  { label: "Climat & risques", dims: ["n_risques", "n_dpe", "n_ensoleillement"] },
+  { label: "Tourisme", dims: ["n_tourisme", "n_loisirs"] },
+  { label: "Socio-démo", dims: ["n_emploi", "n_securite", "n_services"] },
+]
+
 // Libellés FR pour le sélecteur.
 export const METRIC_LABELS: Record<Metric, string> = {
   score_valeur: "Score global",
