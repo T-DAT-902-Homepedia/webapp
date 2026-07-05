@@ -46,6 +46,9 @@ export function Landing() {
             <Button variant="ghost" size="sm" asChild>
               <a href="#fonctionnalites">Fonctionnalités</a>
             </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/classement">Communes sous-cotées</Link>
+            </Button>
             <Button
               size="sm"
               className="bg-accent text-accent-foreground hover:bg-accent/90"
