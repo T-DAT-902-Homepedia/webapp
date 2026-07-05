@@ -20,7 +20,12 @@ import {
   type Metric,
   type ScoreFeature,
 } from "@/lib/score"
-import { makeDivergingScale, makeSequentialScale } from "@/lib/scoreColors"
+import {
+  BIVAR_CLASS_LABELS,
+  makeBivariateScale,
+  makeDivergingScale,
+  makeSequentialScale,
+} from "@/lib/scoreColors"
 import { ScoreSidebar, type Basemap, type MapView } from "@/components/score-sidebar"
 import { loadWordCloud, type CityWordCloud } from "@/lib/parseAvis"
 import WordCloudPopup from "@/components/WordCloudPopup"
@@ -120,6 +125,9 @@ function DeckOverlay({ layers }: { layers: Layer[] }) {
 export default function ScoreMap() {
   const [hovered, setHovered] = useState<ScoreFeature | null>(null)
   const [metric, setMetric] = useState<Metric>("score_valeur")
+  // Mode bivarié : croise `metric` (axe x) avec `metricY` (axe y) sur 3×3 classes.
+  const [bivariate, setBivariate] = useState(false)
+  const [metricY, setMetricY] = useState<Metric>("n_prix")
   const [opacity, setOpacity] = useState(0.8)
   const [basemap, setBasemap] = useState<Basemap>("satellite")
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
@@ -190,6 +198,16 @@ export default function ScoreMap() {
     return diverging ? makeDivergingScale(values) : makeSequentialScale(values)
   }, [data, metric, diverging])
 
+  // Échelle bivariée (terciles sur chaque axe), seulement en mode bivarié.
+  const bivarScale = useMemo(() => {
+    if (!bivariate) return null
+    const fs = data?.features ?? []
+    return makeBivariateScale(
+      fs.map((f) => f.properties[metric]),
+      fs.map((f) => f.properties[metricY]),
+    )
+  }, [data, bivariate, metric, metricY])
+
   const layers = useMemo(() => {
     const choropleth = new GeoJsonLayer<ScoreFeature["properties"]>({
       id: "score-choropleth",
@@ -200,7 +218,12 @@ export default function ScoreMap() {
       filled: true,
       stroked: true,
       opacity,
-      getFillColor: (f) => scale((f as ScoreFeature).properties[metric]),
+      getFillColor: (f) => {
+        const p = (f as ScoreFeature).properties
+        return bivarScale
+          ? bivarScale.color(p[metric], p[metricY])
+          : scale(p[metric])
+      },
       getLineColor: [255, 255, 255, 120],
       lineWidthMinPixels: 0.5,
       pickable: true,
@@ -210,7 +233,7 @@ export default function ScoreMap() {
         selectCommune((info.object as ScoreFeature).properties.code_commune),
       // metric + scale doivent déclencher le recalcul des couleurs (sinon
       // deck.gl garde l'ancienne palette en cache).
-      updateTriggers: { getFillColor: [scale, metric] },
+      updateTriggers: { getFillColor: [scale, bivarScale, metric, metricY] },
     })
 
     // Contour de la commune sélectionnée, au-dessus (ambre, visible sur tout fond).
@@ -243,9 +266,14 @@ export default function ScoreMap() {
         setSelectedCity((info.object as CityWordCloud) ?? null),
     })
     return [choropleth, highlight, wordCloudLayer]
-  }, [data, scale, metric, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
+  }, [data, scale, bivarScale, metric, metricY, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
 
   const hoveredValue = hovered?.properties[metric]
+  // Classes bivariées de la commune survolée, pour la ligne « Classe » du tooltip.
+  const hoveredClasses =
+    hovered && bivarScale
+      ? bivarScale.classes(hovered.properties[metric], hovered.properties[metricY])
+      : null
 
   // À chaque (re)chargement de style — initial OU changement de fond — repasse les
   // labels en français et mémorise le 1er calque de symboles (beforeId). Le
@@ -285,6 +313,10 @@ export default function ScoreMap() {
         basemap={basemap}
         onBasemap={setBasemap}
         onCenter={centerOn}
+        bivariate={bivariate}
+        onBivariate={setBivariate}
+        metricY={metricY}
+        onMetricY={setMetricY}
         isLoading={isLoading}
         isError={isError}
         wordCloudEnabled={wordCloudEnabled}
@@ -319,6 +351,20 @@ export default function ScoreMap() {
                 {fmt(metric, hoveredValue)}
               </span>
             </div>
+            {bivariate && (
+              <div>
+                {METRIC_LABELS[metricY]} :{" "}
+                <span className="font-semibold text-accent">
+                  {fmt(metricY, hovered.properties[metricY])}
+                </span>
+              </div>
+            )}
+            {hoveredClasses && (
+              <div className="text-muted-foreground">
+                Classe : {BIVAR_CLASS_LABELS[hoveredClasses[0]]} ×{" "}
+                {BIVAR_CLASS_LABELS[hoveredClasses[1]]}
+              </div>
+            )}
             <div className="text-muted-foreground">
               {hovered.properties.prix != null
                 ? `${Math.round(hovered.properties.prix).toLocaleString("fr-FR")} €/m²`

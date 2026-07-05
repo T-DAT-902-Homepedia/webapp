@@ -9,7 +9,7 @@ import {
   METRIC_LABELS,
   type Metric,
 } from "@/lib/score"
-import { DIV_LEGEND, SEQ_LEGEND } from "@/lib/scoreColors"
+import { BIVAR_PALETTE, DIV_LEGEND, SEQ_LEGEND } from "@/lib/scoreColors"
 
 export type Basemap = "clair" | "sombre" | "satellite" | "couleur"
 export const BASEMAP_LABELS: Record<Basemap, string> = {
@@ -43,6 +43,10 @@ type ScoreSidebarProps = {
   basemap: Basemap
   onBasemap: (b: Basemap) => void
   onCenter: (view: MapView) => void
+  bivariate: boolean
+  onBivariate: (v: boolean) => void
+  metricY: Metric
+  onMetricY: (m: Metric) => void
   isLoading: boolean
   isError: boolean
   wordCloudEnabled: boolean
@@ -112,6 +116,10 @@ export function ScoreSidebar({
   basemap,
   onBasemap,
   onCenter,
+  bivariate,
+  onBivariate,
+  metricY,
+  onMetricY,
   isLoading,
   isError,
   wordCloudEnabled,
@@ -169,32 +177,90 @@ export function ScoreSidebar({
             })}
           </div>
 
-          {/* Légende du dégradé */}
-          <div className="mt-3">
-            <div className="flex h-2 overflow-hidden rounded-sm">
-              {legend.map((c, i) => (
-                <div
-                  key={i}
-                  className="flex-1"
-                  style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
-                />
+          {/* Mode bivarié : croise la métrique courante avec une seconde. */}
+          <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox.Root
+              checked={bivariate}
+              onCheckedChange={(v) => onBivariate(v === true)}
+              className="flex size-4 shrink-0 items-center justify-center rounded border border-input bg-background data-[state=checked]:border-accent data-[state=checked]:bg-accent"
+            >
+              <Checkbox.Indicator>
+                <Check className="size-3 text-accent-foreground" />
+              </Checkbox.Indicator>
+            </Checkbox.Root>
+            Croiser avec une 2ᵉ métrique
+            <InfoTip
+              label="Mode bivarié"
+              text="Croise deux métriques sur une palette 3×3 pour repérer par exemple les communes « bien notées et abordables »."
+            />
+          </label>
+          {bivariate && (
+            <select
+              value={metricY}
+              onChange={(e) => onMetricY(e.target.value as Metric)}
+              aria-label="Seconde métrique"
+              className="mt-2 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            >
+              {metrics.map((m) => (
+                <option key={m} value={m}>
+                  {METRIC_LABELS[m]}
+                </option>
               ))}
+            </select>
+          )}
+
+          {/* Légende : matrice 3×3 en bivarié, dégradé sinon. */}
+          {bivariate ? (
+            <div className="mt-3 flex items-end gap-2.5">
+              {/* Lignes du haut vers le bas = classe y décroissante (élevé en haut). */}
+              <div className="flex flex-col gap-px">
+                {[2, 1, 0].map((y) => (
+                  <div key={y} className="flex gap-px">
+                    {[0, 1, 2].map((x) => {
+                      const c = BIVAR_PALETTE[y][x]
+                      return (
+                        <div
+                          key={x}
+                          className="size-4"
+                          style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
+                        />
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-0.5 text-[10px] leading-tight text-muted-foreground">
+                <div>→ {METRIC_LABELS[metric]} (faible → élevé)</div>
+                <div>↑ {METRIC_LABELS[metricY]} (faible → élevé)</div>
+              </div>
             </div>
-            <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-              {diverging ? (
-                <>
-                  <span>Cher</span>
-                  <span>Neutre</span>
-                  <span>Bon rapport</span>
-                </>
-              ) : (
-                <>
-                  <span>Faible</span>
-                  <span>Élevé</span>
-                </>
-              )}
+          ) : (
+            <div className="mt-3">
+              <div className="flex h-2 overflow-hidden rounded-sm">
+                {legend.map((c, i) => (
+                  <div
+                    key={i}
+                    className="flex-1"
+                    style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
+                  />
+                ))}
+              </div>
+              <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
+                {diverging ? (
+                  <>
+                    <span>Cher</span>
+                    <span>Neutre</span>
+                    <span>Bon rapport</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Faible</span>
+                    <span>Élevé</span>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {isLoading && (
             <div className="mt-2 text-xs text-muted-foreground">Chargement…</div>
