@@ -31,9 +31,11 @@ import { loadWordCloud, type CityWordCloud } from "@/lib/parseAvis"
 import WordCloudPopup from "@/components/WordCloudPopup"
 import { CommunePanel } from "@/components/commune-panel"
 
-// Centre (bbox) d'une géométrie GeoJSON, pour recentrer sur une commune au
-// deep-link. Parcourt récursivement les coordonnées (Polygon / MultiPolygon).
-function geometryCenter(geom: ScoreFeature["geometry"]): [number, number] {
+// Bbox d'une géométrie GeoJSON, pour cadrer une commune au deep-link.
+// Parcourt récursivement les coordonnées (Polygon / MultiPolygon).
+function geometryBounds(
+  geom: ScoreFeature["geometry"],
+): [[number, number], [number, number]] {
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -50,7 +52,10 @@ function geometryCenter(geom: ScoreFeature["geometry"]): [number, number] {
     }
   }
   visit((geom as { coordinates: unknown }).coordinates)
-  return [(minX + maxX) / 2, (minY + maxY) / 2]
+  return [
+    [minX, minY],
+    [maxX, maxY],
+  ]
 }
 
 const INITIAL_VIEW_STATE: MapViewState = {
@@ -185,7 +190,13 @@ export default function ScoreMap() {
     if (!data || didDeepLinkCenter.current) return
     didDeepLinkCenter.current = true
     if (selected) {
-      mapRef.current?.flyTo({ center: geometryCenter(selected.geometry), zoom: 11, duration: 0 })
+      // Cadre la commune avec de la marge : zoomé dessus, mais les alentours
+      // restent visibles. maxZoom évite le zoom excessif sur les petits villages.
+      mapRef.current?.fitBounds(geometryBounds(selected.geometry), {
+        padding: 80,
+        maxZoom: 12.5,
+        duration: 0,
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data])
