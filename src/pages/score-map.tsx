@@ -31,9 +31,11 @@ import { loadWordCloud, type CityWordCloud } from "@/lib/parseAvis"
 import WordCloudPopup from "@/components/WordCloudPopup"
 import { CommunePanel } from "@/components/commune-panel"
 
-// Centre (bbox) d'une géométrie GeoJSON, pour recentrer sur une commune au
-// deep-link. Parcourt récursivement les coordonnées (Polygon / MultiPolygon).
-function geometryCenter(geom: ScoreFeature["geometry"]): [number, number] {
+// Bbox d'une géométrie GeoJSON, pour cadrer une commune au deep-link.
+// Parcourt récursivement les coordonnées (Polygon / MultiPolygon).
+function geometryBounds(
+  geom: ScoreFeature["geometry"],
+): [[number, number], [number, number]] {
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -50,7 +52,10 @@ function geometryCenter(geom: ScoreFeature["geometry"]): [number, number] {
     }
   }
   visit((geom as { coordinates: unknown }).coordinates)
-  return [(minX + maxX) / 2, (minY + maxY) / 2]
+  return [
+    [minX, minY],
+    [maxX, maxY],
+  ]
 }
 
 const INITIAL_VIEW_STATE: MapViewState = {
@@ -178,17 +183,28 @@ export default function ScoreMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCode])
 
-  // Deep-link : au 1er chargement des données, si l'URL cible une commune, on
-  // recentre dessus. Ne se redéclenche pas aux clics suivants (dep [data]).
+  // Deep-link : dès que données ET carte sont prêtes, si l'URL cible une
+  // commune, on la cadre. `mapReady` est indispensable : en navigation interne
+  // les données sortent du cache immédiatement, avant que la carte n'existe.
+  // Ne se redéclenche pas aux clics suivants (garde didDeepLinkCenter).
+  const [mapReady, setMapReady] = useState(false)
   const didDeepLinkCenter = useRef(false)
   useEffect(() => {
-    if (!data || didDeepLinkCenter.current) return
+    if (!data || !mapReady || didDeepLinkCenter.current) return
     didDeepLinkCenter.current = true
     if (selected) {
-      mapRef.current?.flyTo({ center: geometryCenter(selected.geometry), zoom: 11, duration: 0 })
+      // Cadre la commune avec une large marge : centré dessus, mais les
+      // alentours restent bien visibles. maxZoom borne le zoom sur les
+      // petites communes.
+      // Même durée d'animation que le recentrage France métro / DROM.
+      mapRef.current?.fitBounds(geometryBounds(selected.geometry), {
+        padding: 100,
+        maxZoom: 11,
+        duration: 1200,
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+  }, [data, mapReady])
 
   const diverging = DIVERGING_METRICS.has(metric)
 
@@ -333,6 +349,7 @@ export default function ScoreMap() {
           // les mêmes ids ; le diff laisserait des libellés anglais résiduels).
           styleDiffing={false}
           onStyleData={(e) => syncMapStyle(e.target)}
+          onLoad={() => setMapReady(true)}
           style={{ width: "100%", height: "100%" }}
         >
           <DeckOverlay layers={layers} />
