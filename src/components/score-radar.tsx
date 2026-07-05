@@ -1,8 +1,13 @@
-import { DIMENSIONS, METRIC_LABELS, type ScoreProperties } from "@/lib/score"
+import {
+  METRIC_LABELS,
+  SOURCE_GROUPS,
+  type ScoreProperties,
+} from "@/lib/score"
 
-// Radar SVG des 12 dimensions (valeurs 0–1). Fait main : une lib de graphe serait
-// disproportionnée pour un seul polygone à 12 sommets.
-const N = DIMENSIONS.length
+// Radar SVG des 5 sources de données du sujet (valeurs 0–1) : chaque axe est la
+// moyenne des dimensions n_* de sa source (cf. SOURCE_GROUPS). Fait main : une
+// lib de graphe serait disproportionnée pour un seul polygone à 5 sommets.
+const N = SOURCE_GROUPS.length
 const CX = 100
 const CY = 100
 const R = 60
@@ -13,11 +18,21 @@ const pt = (i: number, v: number): [number, number] => [
   CY + Math.sin(angle(i)) * R * v,
 ]
 
-export function ScoreRadar({ properties }: { properties: ScoreProperties }) {
-  const vals = DIMENSIONS.map((d) => {
-    const v = properties[d]
-    return typeof v === "number" ? Math.max(0, Math.min(1, v)) : 0
+/** Valeur 0–1 de chaque source : moyenne des dimensions renseignées du groupe
+ *  (les NULL sont ignorés ; groupe entièrement vide -> 0). */
+export function sourceProfile(properties: ScoreProperties): number[] {
+  return SOURCE_GROUPS.map((g) => {
+    const nums = g.dims
+      .map((d) => properties[d])
+      .filter((v): v is number => typeof v === "number")
+    if (nums.length === 0) return 0
+    const mean = nums.reduce((a, b) => a + b, 0) / nums.length
+    return Math.max(0, Math.min(1, mean))
   })
+}
+
+export function ScoreRadar({ properties }: { properties: ScoreProperties }) {
+  const vals = sourceProfile(properties)
   const polygon = vals.map((v, i) => pt(i, v).join(",")).join(" ")
 
   return (
@@ -26,7 +41,7 @@ export function ScoreRadar({ properties }: { properties: ScoreProperties }) {
       viewBox="-48 -20 296 240"
       className="w-full"
       role="img"
-      aria-label="Profil de la commune sur 12 dimensions"
+      aria-label="Profil de la commune sur les 5 sources de données"
     >
       {/* Anneaux de repère */}
       {[0.25, 0.5, 0.75, 1].map((lvl) => (
@@ -41,12 +56,12 @@ export function ScoreRadar({ properties }: { properties: ScoreProperties }) {
       ))}
 
       {/* Axes + libellés */}
-      {DIMENSIONS.map((d, i) => {
+      {SOURCE_GROUPS.map((g, i) => {
         const [ax, ay] = pt(i, 1)
         const [lx, ly] = pt(i, 1.16)
         const cos = Math.cos(angle(i))
         return (
-          <g key={d}>
+          <g key={g.label}>
             <line
               x1={CX}
               y1={CY}
@@ -57,12 +72,12 @@ export function ScoreRadar({ properties }: { properties: ScoreProperties }) {
             <text
               x={lx}
               y={ly}
-              fontSize={7}
+              fontSize={8}
               textAnchor={cos > 0.3 ? "start" : cos < -0.3 ? "end" : "middle"}
               dominantBaseline="middle"
               className="fill-muted-foreground"
             >
-              {METRIC_LABELS[d]}
+              {g.label}
             </text>
           </g>
         )
@@ -76,10 +91,18 @@ export function ScoreRadar({ properties }: { properties: ScoreProperties }) {
       />
       {vals.map((v, i) => {
         const [x, y] = pt(i, v)
+        const g = SOURCE_GROUPS[i]
+        // Détail des dimensions du groupe au survol du sommet.
+        const detail = g.dims
+          .map((d) => {
+            const dv = properties[d]
+            return `${METRIC_LABELS[d]} ${typeof dv === "number" ? dv.toFixed(2) : "n/d"}`
+          })
+          .join(" · ")
         return (
           <circle key={i} cx={x} cy={y} r={2} className="fill-accent">
             <title>
-              {METRIC_LABELS[DIMENSIONS[i]]} : {v.toFixed(2)}
+              {g.label} : {v.toFixed(2)} ({detail})
             </title>
           </circle>
         )

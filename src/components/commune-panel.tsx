@@ -65,7 +65,9 @@ export function CommunePanel({
       </div>
 
       <div className="border-t px-4 py-4">
-        <div className="mb-1 text-xs font-semibold">Profil (12 dimensions)</div>
+        <div className="mb-1 text-xs font-semibold">
+          Profil (5 sources de données)
+        </div>
         <ScoreRadar properties={p} />
       </div>
     </aside>
