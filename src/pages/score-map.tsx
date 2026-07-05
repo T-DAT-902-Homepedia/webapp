@@ -183,23 +183,27 @@ export default function ScoreMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCode])
 
-  // Deep-link : au 1er chargement des données, si l'URL cible une commune, on
-  // recentre dessus. Ne se redéclenche pas aux clics suivants (dep [data]).
+  // Deep-link : dès que données ET carte sont prêtes, si l'URL cible une
+  // commune, on la cadre. `mapReady` est indispensable : en navigation interne
+  // les données sortent du cache immédiatement, avant que la carte n'existe.
+  // Ne se redéclenche pas aux clics suivants (garde didDeepLinkCenter).
+  const [mapReady, setMapReady] = useState(false)
   const didDeepLinkCenter = useRef(false)
   useEffect(() => {
-    if (!data || didDeepLinkCenter.current) return
+    if (!data || !mapReady || didDeepLinkCenter.current) return
     didDeepLinkCenter.current = true
     if (selected) {
-      // Cadre la commune avec de la marge : zoomé dessus, mais les alentours
-      // restent visibles. maxZoom évite le zoom excessif sur les petits villages.
+      // Cadre la commune avec une large marge : centré dessus, mais les
+      // alentours restent bien visibles. maxZoom borne le zoom sur les
+      // petites communes.
       mapRef.current?.fitBounds(geometryBounds(selected.geometry), {
-        padding: 80,
-        maxZoom: 12.5,
+        padding: 100,
+        maxZoom: 11,
         duration: 0,
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+  }, [data, mapReady])
 
   const diverging = DIVERGING_METRICS.has(metric)
 
@@ -344,6 +348,7 @@ export default function ScoreMap() {
           // les mêmes ids ; le diff laisserait des libellés anglais résiduels).
           styleDiffing={false}
           onStyleData={(e) => syncMapStyle(e.target)}
+          onLoad={() => setMapReady(true)}
           style={{ width: "100%", height: "100%" }}
         >
           <DeckOverlay layers={layers} />
