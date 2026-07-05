@@ -4,8 +4,10 @@ import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
+import { Sparkline } from "@/components/sparkline"
 import { cn } from "@/lib/utils"
 import { fetchScore, type ScoreProperties } from "@/lib/score"
+import { usePrixSeries } from "@/hooks/usePrixSeries"
 
 // Le livrable actionnable de la problématique (#34) : classement des communes
 // « sous-cotées » — gap_pondere positif = bien notée pour son prix. V1 sans
@@ -46,6 +48,10 @@ export default function Undervalued() {
     queryFn: fetchScore,
     staleTime: Infinity,
   })
+
+  // Séries de prix pour les sparklines. En cas d'échec la table s'affiche
+  // quand même (colonne à « — ») : la couche charts est optionnelle ici.
+  const { data: series } = usePrixSeries()
 
   // Seules les communes notées ET pricées sont classables.
   const rows = useMemo(
@@ -179,6 +185,11 @@ export default function Undervalued() {
                         </button>
                       </th>
                     ))}
+                    {series && (
+                      <th className="px-3 py-2.5 text-right font-semibold text-muted-foreground">
+                        Prix {series.years[0]}–{series.years.at(-1)! % 100}
+                      </th>
+                    )}
                     <th className="px-3 py-2.5" />
                   </tr>
                 </thead>
@@ -221,6 +232,14 @@ export default function Undervalued() {
                         {(p.gap_pondere ?? 0) >= 0 ? "+" : ""}
                         {p.gap_pondere?.toFixed(2)}
                       </td>
+                      {series && (
+                        <td className="px-3 py-2 text-right">
+                          <Sparkline
+                            values={series.communes[p.code_commune] ?? []}
+                            labels={series.years}
+                          />
+                        </td>
+                      )}
                       <td className="px-3 py-2 text-right">
                         <Button size="sm" variant="ghost" asChild>
                           <Link to={`/map?commune=${p.code_commune}`}>

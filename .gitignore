@@ -40,3 +40,6 @@ skills-lock.json
 
 # Playwright MCP artifacts (snapshots, console logs)
 .playwright-mcp/
+
+# Données CDN générées localement pour tester la couche charts (#17)
+public/local-data/
