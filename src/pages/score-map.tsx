@@ -196,10 +196,11 @@ export default function ScoreMap() {
       // Cadre la commune avec une large marge : centré dessus, mais les
       // alentours restent bien visibles. maxZoom borne le zoom sur les
       // petites communes.
+      // Même durée d'animation que le recentrage France métro / DROM.
       mapRef.current?.fitBounds(geometryBounds(selected.geometry), {
         padding: 100,
         maxZoom: 11,
-        duration: 0,
+        duration: 1200,
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
