@@ -15,32 +15,55 @@ BASE = https://storage.googleapis.com/homepedia-web/v1
 ```json
 {
   "schema_version": 1,
-  "run_date": "2026-07-02",
+  "run_date": "2026-07-07",
   "year": 2024,
-  "base": "runs/2026-07-02",
+  "base": "runs/2026-07-07",
   "nb_communes": 34933,
   "nb_communes_scorees": 17774,
-  "generated_at": "2026-07-02T18:31:47+00:00"
+  "nb_communes_avis": 78,
+  "generated_at": "2026-07-07T20:08:24+00:00"
 }
 ```
 
+`nb_communes_avis` (0 ou absent = run sans analyse d'avis) sert de feature-gate à
+la section « avis » ; `schema_version` reste à 1 tant que les évolutions sont
+additives (le schéma zod tolère un futur bump).
+
 - Tout le reste est sous `{BASE}/{meta.base}/…`, **immuable** (cache-control 1 an,
   `immutable`) :
+  - `choropleth/regions-low.geojson` (18 régions, agrégats recalculés sur les
+    transactions du millésime + médianes du score)
   - `choropleth/departements-low.geojson` (~120 Ko gz), `choropleth/departements-mid.geojson` (~800 Ko gz)
-  - `choropleth/communes-mid.geojson` (2,9 Mo gz, 34 928 features, national)
+  - `choropleth/communes-mid.geojson` (~3,4 Mo gz, 34 928 features, national)
   - `choropleth/communes-high/{dept}.geojson` ×101 (`{dept}` ∈ 01…95, 2A, 2B, 971…976)
-  - `communes/{dept}.json` ×101 (fiches commune, groupées par département)
+  - `communes/{dept}.json` ×101 (fiches commune, groupées par département —
+    incluent le bloc `avis` résumé quand la commune est couverte)
+  - `avis/{dept}.json` (départements couverts uniquement, **404 = normal**) :
+    par commune `n_avis`, `sentiment_global`, `low_data`, `themes[]`,
+    `wordcloud[]`, `verbatims[]` (NLP ville-ideale, ~80 grandes villes)
+  - `stats/regions.json` (choroplèthe régionale sans géométrie, pour barres/tableau)
+  - `points/transactions-sample.json` (~100k mutations `{lon, lat, prix, t}`,
+    échantillon reproductible pour la heatmap — chargé lazy en mode heat)
+  - `charts/stats_communes.json`, `charts/prix_distribution.json`,
+    `charts/prix_series.json` (2021→2025, médiane nationale = médiane pondérée
+    des médianes communales)
   - `search/index.json` (~500 Ko gz), `classements/gap-pondere.json` (top 100)
 - CORS : GET/HEAD ouverts. Gzip transparent (`content-encoding: gzip`), `fetch` le
   décode tout seul.
 
-**Properties GeoJSON départements** : `code_departement`, `nom`, `prix_m2_median`
-(nullable), `nb_transactions`, `fiable`, `maison_prix_m2_median` (nullable),
-`maison_nb_transactions`, `maison_fiable`, `appart_prix_m2_median` (nullable),
-`appart_nb_transactions`, `appart_fiable`.
+**Properties GeoJSON régions** : `code_region`, `nom`, mêmes colonnes prix que les
+départements, plus `score_median`, `gap_pondere_median`, `nb_communes_scorees`.
 
-**Properties GeoJSON communes** : les mêmes **plus** `code_commune`, `score_valeur`
-(nullable), `gap_pondere` (nullable).
+**Properties GeoJSON départements** : `code_departement`, `nom`, `code_region`,
+`nom_region`, `prix_m2_median` (nullable), `nb_transactions`, `fiable`,
+`maison_prix_m2_median` (nullable), `maison_nb_transactions`, `maison_fiable`,
+`appart_prix_m2_median` (nullable), `appart_nb_transactions`, `appart_fiable`.
+
+**Properties GeoJSON communes** : les colonnes prix ci-dessus **plus**
+`code_commune`, `score_valeur`, `gap`, `gap_pondere`, `dpe_dominant` et les 12
+dimensions normalisées `n_*` (toutes nullables). Le `v1/score.geojson` racine est
+**déprécié** : `src/lib/score.ts` adapte désormais la choroplèthe communale
+versionnée à son ancien format.
 
 ## Sémantique métier
 
