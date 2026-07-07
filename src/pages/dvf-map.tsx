@@ -5,7 +5,7 @@ import type { MapViewState } from "@deck.gl/core"
 import Map from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { ArrowLeft } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { useChoropleth } from "@/hooks/useChoropleth"
@@ -34,6 +34,7 @@ const EMPTY_COLLECTION = { type: "FeatureCollection" as const, features: [] }
 export default function DvfMap() {
   const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom ?? 5)
   const [hovered, setHovered] = useState<ChoroplethFeature | null>(null)
+  const navigate = useNavigate()
 
   const typeLocal = useFilters((s) => s.typeLocal)
   const setTypeLocal = useFilters((s) => s.setTypeLocal)
@@ -78,11 +79,17 @@ export default function DvfMap() {
         pickable: true,
         onHover: (info) =>
           setHovered((info.object as ChoroplethFeature) ?? null),
+        // Clic sur une commune -> fiche détaillée (rien au grain département).
+        onClick: (info) => {
+          const code = (info.object as ChoroplethFeature | undefined)?.properties
+            .code_commune
+          if (code) navigate(`/commune/${code}`)
+        },
         // colorScale change d'identité quand (data, typeLocal) changent : c'est
         // lui qui déclenche le recalcul des couleurs.
         updateTriggers: { getFillColor: [colorScale] },
       }),
-    [data, colorScale, mesh, lod],
+    [data, colorScale, mesh, lod, navigate],
   )
 
   const hoveredStats = hovered ? statsForType(hovered.properties, typeLocal) : null

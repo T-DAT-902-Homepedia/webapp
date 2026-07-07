@@ -80,6 +80,35 @@ export const METRIC_INFO: Record<Metric, string> = {
 // le reste est dans [0, 1] -> échelle séquentielle.
 export const DIVERGING_METRICS: ReadonlySet<Metric> = new Set(["gap_pondere"])
 
+// --- Anatomie du score (radar de la fiche commune) -----------------------------
+// Les 9 dimensions PONDÉRÉES du score gold, ordonnées par poids décroissant :
+// la forme du radar reflète la vraie composition du score. n_prix, n_access_fin
+// et n_dpe sont calculées mais HORS score (contexte) — affichées à part.
+
+export interface ComposanteDef {
+  key: Dimension
+  label: string
+  poids: number | null // null = hors score
+}
+
+export const COMPOSANTES_PONDEREES: ComposanteDef[] = [
+  { key: "n_emploi", label: METRIC_LABELS.n_emploi, poids: 0.3 },
+  { key: "n_proximite", label: METRIC_LABELS.n_proximite, poids: 0.18 },
+  { key: "n_transport", label: METRIC_LABELS.n_transport, poids: 0.15 },
+  { key: "n_securite", label: METRIC_LABELS.n_securite, poids: 0.12 },
+  { key: "n_services", label: METRIC_LABELS.n_services, poids: 0.12 },
+  { key: "n_loisirs", label: METRIC_LABELS.n_loisirs, poids: 0.07 },
+  { key: "n_ensoleillement", label: METRIC_LABELS.n_ensoleillement, poids: 0.04 },
+  { key: "n_risques", label: METRIC_LABELS.n_risques, poids: 0.01 },
+  { key: "n_tourisme", label: METRIC_LABELS.n_tourisme, poids: 0.01 },
+]
+
+export const COMPOSANTES_CONTEXTE: ComposanteDef[] = [
+  { key: "n_prix", label: METRIC_LABELS.n_prix, poids: null },
+  { key: "n_access_fin", label: METRIC_LABELS.n_access_fin, poids: null },
+  { key: "n_dpe", label: METRIC_LABELS.n_dpe, poids: null },
+]
+
 // --- Types ---------------------------------------------------------------------
 // Les properties ne sont PAS validées au runtime (cf. fetchScore) : plutôt qu'un
 // schéma zod jamais parsé, on décrit la forme en types TS. Les 12 dimensions
