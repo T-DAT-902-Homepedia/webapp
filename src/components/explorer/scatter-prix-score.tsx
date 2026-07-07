@@ -60,7 +60,7 @@ export function ScatterPrixScore() {
         .map((p) => ({
           code: p.code_commune!,
           nom: p.nom,
-          dept: p.code_departement,
+          dept: p.code_departement ?? "",
           prix: p.prix_m2_median!,
           score: p.score_valeur!,
           gap: p.gap_pondere ?? null,

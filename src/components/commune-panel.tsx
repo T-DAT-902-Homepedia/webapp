@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
-import { X } from "lucide-react"
+import { Link } from "react-router-dom"
+import { ArrowRight, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { ScoreFeature } from "@/lib/score"
@@ -69,6 +70,15 @@ export function CommunePanel({
           Profil (5 sources de données)
         </div>
         <ScoreRadar properties={p} />
+      </div>
+
+      <div className="mt-auto border-t p-4">
+        <Button className="w-full" variant="outline" asChild>
+          <Link to={`/commune/${p.code_commune}`}>
+            Fiche complète (évolution, avis, indicateurs)
+            <ArrowRight className="size-4" />
+          </Link>
+        </Button>
       </div>
     </aside>
   )

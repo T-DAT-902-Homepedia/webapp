@@ -4,13 +4,29 @@ import { Link } from "react-router-dom"
 import { FranceOutline } from "@/components/france-outline"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useMeta } from "@/hooks/useMeta"
+import { formatInt } from "@/lib/format"
+import type { Meta } from "@/lib/data"
 
-const STATS = [
-  { value: "34 935", label: "communes couvertes" },
-  { value: "5M+", label: "transactions DVF analysées" },
-  { value: "13", label: "régions comparables" },
-  { value: "10 ans", label: "d'historique de prix" },
-]
+// Chiffres réels du run courant (meta.json) ; repli sur les derniers connus
+// tant que meta charge (évite un flash de zéros).
+function buildStats(meta: Meta | undefined) {
+  return [
+    {
+      value: meta ? formatInt(meta.nb_communes) : "34 933",
+      label: "communes couvertes",
+    },
+    {
+      value: meta ? formatInt(meta.nb_communes_scorees) : "17 774",
+      label: "communes notées qualité de vie",
+    },
+    { value: "18", label: "régions comparables" },
+    {
+      value: meta ? String(meta.year) : "2024",
+      label: "millésime DVF analysé",
+    },
+  ]
+}
 
 const FEATURES = [
   {
@@ -34,6 +50,8 @@ const FEATURES = [
 ]
 
 export function Landing() {
+  const { data: meta } = useMeta()
+  const STATS = buildStats(meta)
   return (
     <div className="min-h-svh bg-background text-foreground">
       {/* Header */}

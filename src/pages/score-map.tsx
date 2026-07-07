@@ -15,11 +15,13 @@ import { useQuery } from "@tanstack/react-query"
 import {
   DIMENSIONS,
   DIVERGING_METRICS,
-  fetchScore,
+  EURO_METRICS,
   METRIC_LABELS,
+  PRIX_METRICS,
   type Metric,
   type ScoreFeature,
 } from "@/lib/score"
+import { useScore } from "@/hooks/useScore"
 import {
   BIVAR_CLASS_LABELS,
   makeBivariateScale,
@@ -71,8 +73,9 @@ const MIN_ZOOM = 4
 // recréerait la couche à chaque render).
 const EMPTY_COLLECTION = { type: "FeatureCollection" as const, features: [] }
 
-// Ordre du sélecteur : score global, écart qualité/prix, puis les 12 dimensions.
-const METRICS: Metric[] = ["score_valeur", "gap_pondere", ...DIMENSIONS]
+// Ordre du sélecteur : score global, écart qualité/prix, prix par type de
+// bien, puis les 12 dimensions.
+const METRICS: Metric[] = ["score_valeur", "gap_pondere", ...PRIX_METRICS, ...DIMENSIONS]
 
 // Imagerie aérienne Esri (raster, sans clé) pour le fond « Satellite ».
 const SATELLITE_STYLE: StyleSpecification = {
@@ -110,10 +113,11 @@ const FR_LABEL = [
   ["get", "name"],
 ]
 
-/** Formate une valeur de métrique pour l'affichage (gap signé, reste en 0–1). */
+/** Formate une valeur de métrique (gap signé, prix en €/m², reste en 0–1). */
 function fmt(metric: Metric, v: number | null | undefined): string {
   if (v == null) return "—"
   if (metric === "gap_pondere") return (v >= 0 ? "+" : "") + v.toFixed(2)
+  if (EURO_METRICS.has(metric)) return `${Math.round(v).toLocaleString("fr-FR")} €/m²`
   return v.toFixed(2)
 }
 
@@ -144,11 +148,7 @@ export default function ScoreMap() {
   const centerOn = (view: MapView) =>
     mapRef.current?.flyTo({ center: view.center, zoom: view.zoom, duration: 1200 })
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["score"],
-    queryFn: fetchScore,
-    staleTime: Infinity, // fichier statique : jamais périmé en session.
-  })
+  const { data, isLoading, isError } = useScore()
 
   const { data: cities } = useQuery({
     queryKey: ["wordcloud"],

@@ -1,14 +1,14 @@
 import type { Geometry } from "geojson"
 import { z } from "zod"
 
-// Score territoire : GeoJSON exporté depuis le gold duckpipe et publié sur le
-// bucket public homepedia-web (public + CORS). Le front le récupère directement
-// par HTTP, comme un appel d'API — pas de fichier dans le repo, pas d'API métier.
-// Surchargeable via VITE_SCORE_URL. La fraîcheur est gérée côté objet GCS
-// (Cache-Control public, max-age=300).
-const SCORE_URL =
-  import.meta.env.VITE_SCORE_URL ??
-  "https://storage.googleapis.com/homepedia-web/v1/score.geojson"
+import { artifactUrl } from "@/lib/data"
+
+// Score territoire : depuis la consolidation ADR-0014, la choroplèthe
+// communale versionnée (meta.json -> runs/{run}/choropleth/communes-mid)
+// expose TOUTES les métriques — score, gap, dimensions ET prix par type de
+// bien. L'ancien v1/score.geojson (déprécié) n'est plus consommé ; on adapte
+// ici les properties au format historique de la page pour ne pas réécrire
+// tous ses consommateurs.
 
 // --- Métriques exposées -------------------------------------------------------
 
@@ -18,7 +18,18 @@ export const DIMENSIONS = [
   "n_services", "n_loisirs", "n_ensoleillement", "n_proximite", "n_access_fin", "n_prix",
 ] as const
 
-export type Metric = "score_valeur" | "gap_pondere" | (typeof DIMENSIONS)[number]
+// Métriques prix (€/m², médianes DVF) — sélectionnables et croisables en
+// bivarié comme les autres (ex. prix × sécurité).
+export const PRIX_METRICS = ["prix", "prix_maison", "prix_appart"] as const
+
+export type Metric =
+  | "score_valeur"
+  | "gap_pondere"
+  | (typeof PRIX_METRICS)[number]
+  | (typeof DIMENSIONS)[number]
+
+/** Métriques en euros (formatage et légende dédiés). */
+export const EURO_METRICS: ReadonlySet<Metric> = new Set(PRIX_METRICS)
 
 export type Dimension = (typeof DIMENSIONS)[number]
 
@@ -37,6 +48,9 @@ export const SOURCE_GROUPS: { label: string; dims: Dimension[] }[] = [
 export const METRIC_LABELS: Record<Metric, string> = {
   score_valeur: "Score global",
   gap_pondere: "Écart qualité/prix",
+  prix: "Prix au m²",
+  prix_maison: "Prix maisons",
+  prix_appart: "Prix appartements",
   n_transport: "Transport",
   n_securite: "Sécurité",
   n_tourisme: "Tourisme",
@@ -57,6 +71,9 @@ export const METRIC_INFO: Record<Metric, string> = {
     "Note globale de 0 à 1 agrégeant toutes les dimensions, pondérées par leur importance.",
   gap_pondere:
     "Écart entre la qualité du territoire et son prix. Positif = bon rapport qualité/prix, négatif = cher pour ce qu'offre la commune.",
+  prix: "Prix de vente médian au m² (DVF, tous types de biens confondus).",
+  prix_maison: "Prix de vente médian au m² des maisons (DVF).",
+  prix_appart: "Prix de vente médian au m² des appartements (DVF).",
   n_transport:
     "Desserte en transports : densité d'arrêts et accès au réseau. Élevé = bien desservi.",
   n_securite:
@@ -121,6 +138,8 @@ export type ScoreProperties = {
   nom?: string | null
   dep?: string | null
   prix?: NumOrNull
+  prix_maison?: NumOrNull
+  prix_appart?: NumOrNull
   nb_transactions?: NumOrNull
   dpe?: string | null
   score_valeur: NumOrNull
@@ -140,7 +159,7 @@ export type ScoreCollection = {
 }
 
 // On valide seulement la FORME de l'enveloppe (pas chaque feature) : valider
-// ~18k features × ~20 champs bloquerait le thread principal plusieurs secondes,
+// ~35k features × ~25 champs bloquerait le thread principal plusieurs secondes,
 // et un seul enregistrement fautif ferait échouer TOUTE la carte. La source est
 // notre propre export contrôlé : une propriété manquante dégrade en "no data"
 // pour la commune concernée (getFillColor -> NO_DATA), pas en crash global.
@@ -149,13 +168,60 @@ const scoreEnvelope = z.object({
   features: z.array(z.unknown()),
 })
 
-/** Charge le GeoJSON depuis le bucket (géométrie + toutes les métriques, un seul fetch). */
-export async function fetchScore(): Promise<ScoreCollection> {
-  const res = await fetch(SCORE_URL)
+// Properties de la choroplèthe communale (contrat pipeline) telles qu'on les
+// adapte — décrites en TS, non validées (cf. commentaire enveloppe).
+type ChoroplethRaw = {
+  code_commune?: string
+  nom?: string | null
+  code_departement?: string | null
+  prix_m2_median?: NumOrNull
+  maison_prix_m2_median?: NumOrNull
+  appart_prix_m2_median?: NumOrNull
+  nb_transactions?: NumOrNull
+  dpe_dominant?: string | null
+  score_valeur?: NumOrNull
+  gap?: NumOrNull
+  gap_pondere?: NumOrNull
+} & Partial<Record<(typeof DIMENSIONS)[number], NumOrNull>>
+
+/**
+ * Charge la choroplèthe communale du run courant (`base` de meta.json) et
+ * adapte ses properties au format historique de la page (un seul fetch :
+ * géométries + toutes les métriques, 34 928 communes — les non-scorées
+ * rendent « no data » sur les métriques de score).
+ */
+export async function fetchScore(base: string): Promise<ScoreCollection> {
+  const url = artifactUrl(base, "choropleth/communes-mid.geojson")
+  const res = await fetch(url)
   if (!res.ok) {
-    throw new Error(`score.geojson -> ${res.status} ${res.statusText}`)
+    throw new Error(`CDN ${url} -> ${res.status} ${res.statusText}`)
   }
   const json = await res.json()
   scoreEnvelope.parse(json) // vérifie type + features:[] sans parcourir chaque feature
-  return json as ScoreCollection
+
+  const collection = json as { features: { geometry: Geometry; properties: ChoroplethRaw }[] }
+  const features: ScoreFeature[] = collection.features.map((f) => {
+    const p = f.properties
+    return {
+      type: "Feature" as const,
+      geometry: f.geometry,
+      properties: {
+        code_commune: p.code_commune ?? "",
+        nom: p.nom ?? null,
+        dep: p.code_departement ?? null,
+        prix: p.prix_m2_median ?? null,
+        prix_maison: p.maison_prix_m2_median ?? null,
+        prix_appart: p.appart_prix_m2_median ?? null,
+        nb_transactions: p.nb_transactions ?? null,
+        dpe: p.dpe_dominant ?? null,
+        score_valeur: p.score_valeur ?? null,
+        gap: p.gap ?? null,
+        gap_pondere: p.gap_pondere ?? null,
+        ...(Object.fromEntries(
+          DIMENSIONS.map((d) => [d, p[d] ?? null]),
+        ) as Record<(typeof DIMENSIONS)[number], NumOrNull>),
+      },
+    }
+  })
+  return { type: "FeatureCollection", features }
 }
