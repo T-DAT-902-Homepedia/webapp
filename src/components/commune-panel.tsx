@@ -36,7 +36,9 @@ export function CommunePanel({
       : "—"
 
   return (
-    <aside className="flex h-svh w-80 shrink-0 flex-col overflow-y-auto border-l bg-card text-card-foreground">
+    <aside className="flex h-svh w-80 shrink-0 flex-col overflow-y-auto border-l bg-card text-card-foreground max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:h-[60svh] max-md:w-full max-md:rounded-t-xl max-md:border-t max-md:border-l-0">
+      {/* Poignée du bottom-sheet mobile */}
+      <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" />
       <div className="flex items-start justify-between gap-2 border-b px-4 py-3">
         <div>
           <div className="font-display text-base leading-tight font-bold">

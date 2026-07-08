@@ -603,7 +603,7 @@ export default function DvfMap() {
 
       {/* Tooltip au survol */}
       {!heat && hovered && hoveredStats && (
-        <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
+        <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur pointer-coarse:hidden">
           <div className="font-display font-semibold">
             {hovered.properties.nom}
           </div>

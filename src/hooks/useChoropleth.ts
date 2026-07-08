@@ -11,7 +11,7 @@ import { useMeta } from "@/hooks/useMeta"
  * Le clamp du LOD vit ici (pas dans lodForZoom) pour que la clé de cache ne
  * produise pas de doublons mid/high identiques.
  */
-export function useChoropleth(mesh: Mesh, lod: Lod) {
+export function useChoropleth(mesh: Mesh, lod: Lod, enabled = true) {
   const { data: meta } = useMeta()
   const effectiveLod: Lod =
     mesh === "regions"
@@ -26,7 +26,7 @@ export function useChoropleth(mesh: Mesh, lod: Lod) {
   return useQuery({
     queryKey: ["choropleth", meta?.base, mesh, effectiveLod],
     queryFn: () => fetchChoropleth(meta!.base, mesh, effectiveLod),
-    enabled: !!meta,
+    enabled: enabled && !!meta,
     staleTime: Infinity,
   })
 }

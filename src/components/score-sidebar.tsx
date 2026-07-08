@@ -1,5 +1,6 @@
-import { Accordion, Checkbox, Slider, Tooltip } from "radix-ui"
-import { Check, ChevronDown, Info } from "lucide-react"
+import { useState } from "react"
+import { Accordion, Checkbox, Dialog, Slider, Tooltip } from "radix-ui"
+import { Check, ChevronDown, Info, SlidersHorizontal } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -124,7 +125,7 @@ function AccordionSection({
   )
 }
 
-export function ScoreSidebar({
+function SidebarContent({
   metrics,
   metric,
   onMetric,
@@ -147,8 +148,7 @@ export function ScoreSidebar({
   onWordCloudEnabled,
 }: ScoreSidebarProps) {
   return (
-    <Tooltip.Provider>
-      <aside className="flex h-svh w-80 shrink-0 flex-col overflow-y-auto border-r bg-card text-card-foreground">
+    <>
         {/* Sélecteur de métrique : une ligne par catégorie, avec son « i ». */}
         <div className="px-4 py-3">
           <div className="text-sm font-semibold">Score territoire</div>
@@ -341,7 +341,44 @@ export function ScoreSidebar({
             </div>
           </AccordionSection>
         </Accordion.Root>
+    </>
+  )
+}
+
+/** Sidebar de la carte Qualité de vie : <aside> fixe en desktop, drawer
+ *  Radix (bouton flottant « Réglages ») sous md — la version fixe rendait
+ *  la page inutilisable sur mobile (sidebar + panneau = tout l'écran). */
+export function ScoreSidebar(props: ScoreSidebarProps) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <Tooltip.Provider>
+      <aside className="hidden h-svh w-80 shrink-0 flex-col overflow-y-auto border-r bg-card text-card-foreground md:flex">
+        <SidebarContent {...props} />
       </aside>
+
+      <div className="md:hidden">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="fixed top-14 left-3 z-30 flex items-center gap-1.5 rounded-lg border bg-background/95 px-2.5 py-1.5 text-xs font-medium shadow-lg backdrop-blur"
+        >
+          <SlidersHorizontal className="size-3.5" />
+          Réglages
+        </button>
+        <Dialog.Root open={open} onOpenChange={setOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45" />
+            <Dialog.Content
+              className="fixed inset-y-0 left-0 z-50 flex w-80 max-w-[85vw] flex-col overflow-y-auto border-r bg-card text-card-foreground shadow-2xl focus:outline-none"
+              aria-describedby={undefined}
+            >
+              <Dialog.Title className="sr-only">Réglages de la carte</Dialog.Title>
+              <SidebarContent {...props} />
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      </div>
     </Tooltip.Provider>
   )
 }

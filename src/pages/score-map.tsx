@@ -20,7 +20,8 @@ import {
   type Metric,
   type ScoreFeature,
 } from "@/lib/score"
-import { useScore } from "@/hooks/useScore"
+import { adaptScoreProperties, useScoreMesh } from "@/hooks/useScoreMesh"
+import { useChoropleth } from "@/hooks/useChoropleth"
 import {
   BIVAR_CLASS_LABELS,
   makeBivariateScale,
@@ -150,6 +151,10 @@ function DeckOverlay({ layers }: { layers: Layer[] }) {
 
 export default function ScoreMap() {
   const [searchParams, setSearchParams] = useSearchParams()
+  // Vue initiale depuis l'URL (v=), figée au premier rendu.
+  const [initialViewRef] = useState<MapViewState>(
+    () => parseViewParam(new URLSearchParams(window.location.search).get("v")) ?? INITIAL_VIEW_STATE,
+  )
   const [hovered, setHovered] = useState<ScoreFeature | null>(null)
   const [metric, setMetric] = useState<Metric>(() => {
     const m = searchParams.get("m")
@@ -185,7 +190,9 @@ export default function ScoreMap() {
     return `${c.lat.toFixed(4)},${c.lng.toFixed(4)},${map.getZoom().toFixed(2)}`
   }
 
-  const { data, isLoading, isError } = useScore()
+  // Maille adaptative : régions -> départements -> communes selon le zoom.
+  const [zoom, setZoom] = useState(() => initialViewRef.zoom ?? 5)
+  const { data, mesh, isLoading, isError } = useScoreMesh(zoom)
 
   // Marqueurs « avis » : index CDN (communes couvertes + centres), lazy.
   const { data: cities } = useAvisIndex(wordCloudEnabled)
@@ -193,15 +200,23 @@ export default function ScoreMap() {
   // Commune sélectionnée = source de vérité dans l'URL (?commune=<code>), pour un
   // deep-link partageable et rechargeable.
   const selectedCode = searchParams.get("commune")
-  const selected = useMemo(
-    () =>
-      selectedCode
-        ? (data?.features.find(
-            (f) => f.properties.code_commune === selectedCode,
-          ) ?? null)
-        : null,
-    [data, selectedCode],
-  )
+  // La géométrie de la commune sélectionnée vient de la maille communale,
+  // quelle que soit la maille affichée (deep-link ?commune= au zoom national).
+  // Même queryKey que la maille communes : zéro fetch en double au zoom élevé.
+  const { data: communesData } = useChoropleth("communes", "mid", !!selectedCode)
+  const selected = useMemo(() => {
+    if (!selectedCode) return null
+    const feat = communesData?.features.find(
+      (f) => f.properties.code_commune === selectedCode,
+    )
+    return feat
+      ? ({
+          type: "Feature" as const,
+          geometry: feat.geometry,
+          properties: adaptScoreProperties(feat.properties),
+        } as ScoreFeature)
+      : null
+  }, [communesData, selectedCode])
 
   // Mises à jour FUSIONNANTES : chaque écrivain ne touche que sa clé (le
   // setSearchParams({commune}) historique écrasait métrique/fond, audit A3).
@@ -289,7 +304,7 @@ export default function ScoreMap() {
 
   const layers = useMemo(() => {
     const choropleth = new GeoJsonLayer<ScoreFeature["properties"]>({
-      id: "score-choropleth",
+      id: `score-choropleth-${mesh}`,
       data: data ?? EMPTY_COLLECTION,
       // beforeId glisse la couche sous les labels (prop runtime de @deck.gl/mapbox,
       // non typée en v8) ; spread conditionnel pour éviter l'erreur de type.
@@ -307,9 +322,19 @@ export default function ScoreMap() {
       lineWidthMinPixels: 0.5,
       pickable: true,
       onHover: (info) => setHovered((info.object as ScoreFeature) ?? null),
-      onClick: (info) =>
-        info.object &&
-        selectCommune((info.object as ScoreFeature).properties.code_commune),
+      onClick: (info) => {
+        const feat = info.object as ScoreFeature | undefined
+        if (!feat) return
+        if (mesh === "communes" && feat.properties.code_commune) {
+          selectCommune(feat.properties.code_commune)
+          return
+        }
+        // Drill-down : cadre la région / le département cliqué.
+        mapRef.current?.fitBounds(geometryBounds(feat.geometry), {
+          padding: 40,
+          duration: 800,
+        })
+      },
       // metric + scale doivent déclencher le recalcul des couleurs (sinon
       // deck.gl garde l'ancienne palette en cache).
       updateTriggers: { getFillColor: [scale, bivarScale, metric, metricY] },
@@ -328,7 +353,8 @@ export default function ScoreMap() {
       pickable: false,
     })
 
-    if (!wordCloudEnabled || !cities) return [choropleth, highlight]
+    if (mesh !== "communes" || !wordCloudEnabled || !cities)
+      return [choropleth, highlight]
 
     const wordCloudLayer = new ScatterplotLayer<AvisIndexEntry>({
       id: "wordcloud-cities",
@@ -347,7 +373,7 @@ export default function ScoreMap() {
       },
     })
     return [choropleth, highlight, wordCloudLayer]
-  }, [data, scale, bivarScale, metric, metricY, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
+  }, [data, mesh, scale, bivarScale, metric, metricY, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
 
   const hoveredValue = hovered?.properties[metric]
   // Classes bivariées de la commune survolée, pour la ligne « Classe » du tooltip.
@@ -381,12 +407,6 @@ export default function ScoreMap() {
     }
     setFillBeforeId(symbols[0]?.id)
   }
-
-  const initialView = useMemo(
-    () => parseViewParam(searchParams.get("v")) ?? INITIAL_VIEW_STATE,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  )
 
   return (
     <div className="flex h-svh w-svw overflow-hidden bg-background text-foreground">
@@ -424,10 +444,11 @@ export default function ScoreMap() {
         />
         <Map
           ref={mapRef}
-          initialViewState={initialView}
+          initialViewState={initialViewRef}
           minZoom={MIN_ZOOM}
           onMoveEnd={(e) => {
             const c = e.viewState
+            setZoom(c.zoom)
             patchParams(
               { v: `${c.latitude.toFixed(4)},${c.longitude.toFixed(4)},${c.zoom.toFixed(2)}` },
               true,
@@ -446,7 +467,7 @@ export default function ScoreMap() {
 
         {/* Tooltip au survol */}
         {hovered && (
-          <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
+          <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur pointer-coarse:hidden">
             <div className="font-display font-semibold">
               {hovered.properties.nom ?? hovered.properties.code_commune}
               {hovered.properties.dep ? ` (${hovered.properties.dep})` : ""}

@@ -34,7 +34,23 @@ export const choroplethPropertiesSchema = z.object({
   // Maille commune :
   code_commune: z.string().optional(),
   score_valeur: z.number().nullable().optional(),
+  gap: z.number().nullable().optional(),
   gap_pondere: z.number().nullable().optional(),
+  dpe_dominant: z.string().nullable().optional(),
+  // Les 12 dimensions normalisées du score (valeurs communales, médianes aux
+  // mailles département/région — mêmes noms à toutes les mailles).
+  n_prix: z.number().nullable().optional(),
+  n_transport: z.number().nullable().optional(),
+  n_access_fin: z.number().nullable().optional(),
+  n_risques: z.number().nullable().optional(),
+  n_tourisme: z.number().nullable().optional(),
+  n_securite: z.number().nullable().optional(),
+  n_services: z.number().nullable().optional(),
+  n_loisirs: z.number().nullable().optional(),
+  n_ensoleillement: z.number().nullable().optional(),
+  n_emploi: z.number().nullable().optional(),
+  n_proximite: z.number().nullable().optional(),
+  n_dpe: z.number().nullable().optional(),
 })
 export type ChoroplethProperties = z.infer<typeof choroplethPropertiesSchema>
 
