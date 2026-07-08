@@ -10,7 +10,6 @@ import type {
   StyleSpecification,
 } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { useQuery } from "@tanstack/react-query"
 
 import {
   DIMENSIONS,
@@ -26,12 +25,14 @@ import {
   BIVAR_CLASS_LABELS,
   makeBivariateScale,
   makeDivergingScale,
+  makePriceScale,
   makeSequentialScale,
 } from "@/lib/scoreColors"
 import { ScoreSidebar, type Basemap, type MapView } from "@/components/score-sidebar"
-import { loadWordCloud, type CityWordCloud } from "@/lib/parseAvis"
 import WordCloudPopup from "@/components/WordCloudPopup"
 import { CommunePanel } from "@/components/commune-panel"
+import { useAvisIndex } from "@/hooks/useAvis"
+import type { AvisIndexEntry } from "@/lib/avis"
 
 // Bbox d'une géométrie GeoJSON, pour cadrer une commune au deep-link.
 // Parcourt récursivement les coordonnées (Polygon / MultiPolygon).
@@ -141,7 +142,9 @@ export default function ScoreMap() {
   const [basemap, setBasemap] = useState<Basemap>("clair")
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
   const [wordCloudEnabled, setWordCloudEnabled] = useState(false)
-  const [selectedCity, setSelectedCity] = useState<CityWordCloud | null>(null)
+  const [selectedCity, setSelectedCity] = useState<{ code: string; nom: string } | null>(
+    null,
+  )
   const mapRef = useRef<MapRef>(null)
 
   // Recentre la carte (France métro ou un DROM) via une animation flyTo.
@@ -150,12 +153,8 @@ export default function ScoreMap() {
 
   const { data, isLoading, isError } = useScore()
 
-  const { data: cities } = useQuery({
-    queryKey: ["wordcloud"],
-    queryFn: loadWordCloud,
-    staleTime: Infinity,
-    enabled: wordCloudEnabled,
-  })
+  // Marqueurs « avis » : index CDN (communes couvertes + centres), lazy.
+  const { data: cities } = useAvisIndex(wordCloudEnabled)
 
   // Commune sélectionnée = source de vérité dans l'URL (?commune=<code>), pour un
   // deep-link partageable et rechargeable.
@@ -208,10 +207,13 @@ export default function ScoreMap() {
 
   const diverging = DIVERGING_METRICS.has(metric)
 
-  // Échelle recalculée quand la métrique ou les données changent.
+  // Échelle recalculée quand la métrique ou les données changent. Palette par
+  // famille : YlOrRd pour les prix (identique à /carte), bleu-violet pour le
+  // score et ses dimensions, PRGn divergent pour le gap.
   const scale = useMemo(() => {
     const values = (data?.features ?? []).map((f) => f.properties[metric])
-    return diverging ? makeDivergingScale(values) : makeSequentialScale(values)
+    if (diverging) return makeDivergingScale(values)
+    return EURO_METRICS.has(metric) ? makePriceScale(values) : makeSequentialScale(values)
   }, [data, metric, diverging])
 
   // Échelle bivariée (terciles sur chaque axe), seulement en mode bivarié.
@@ -238,7 +240,7 @@ export default function ScoreMap() {
         const p = (f as ScoreFeature).properties
         return bivarScale
           ? bivarScale.color(p[metric], p[metricY])
-          : scale(p[metric])
+          : scale.color(p[metric])
       },
       getLineColor: [255, 255, 255, 120],
       lineWidthMinPixels: 0.5,
@@ -267,7 +269,7 @@ export default function ScoreMap() {
 
     if (!wordCloudEnabled || !cities) return [choropleth, highlight]
 
-    const wordCloudLayer = new ScatterplotLayer<CityWordCloud>({
+    const wordCloudLayer = new ScatterplotLayer<AvisIndexEntry>({
       id: "wordcloud-cities",
       data: cities,
       getPosition: (c) => [c.lng, c.lat],
@@ -278,8 +280,10 @@ export default function ScoreMap() {
       radiusUnits: "pixels",
       getRadius: 7,
       pickable: true,
-      onClick: (info: PickingInfo) =>
-        setSelectedCity((info.object as CityWordCloud) ?? null),
+      onClick: (info: PickingInfo) => {
+        const entry = info.object as AvisIndexEntry | undefined
+        setSelectedCity(entry ? { code: entry.c, nom: entry.n ?? entry.c } : null)
+      },
     })
     return [choropleth, highlight, wordCloudLayer]
   }, [data, scale, bivarScale, metric, metricY, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
@@ -323,7 +327,10 @@ export default function ScoreMap() {
         metrics={METRICS}
         metric={metric}
         onMetric={setMetric}
-        diverging={diverging}
+        scale={scale}
+        bivarScale={bivarScale}
+        format={(v) => fmt(metric, v)}
+        formatY={(v) => fmt(metricY, v)}
         opacity={opacity}
         onOpacity={setOpacity}
         basemap={basemap}
@@ -391,13 +398,11 @@ export default function ScoreMap() {
         )}
 
         {selectedCity && (
-          <div
-            onClick={() => setSelectedCity(null)}
-            className="fixed inset-0 z-[999] bg-black/45"
+          <WordCloudPopup
+            code={selectedCity.code}
+            nom={selectedCity.nom}
+            onClose={() => setSelectedCity(null)}
           />
-        )}
-        {selectedCity && (
-          <WordCloudPopup city={selectedCity} onClose={() => setSelectedCity(null)} />
         )}
       </div>
 

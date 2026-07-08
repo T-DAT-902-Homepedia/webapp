@@ -1,9 +1,21 @@
 import { useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 
-import { fetchAvisDept, type AvisCommune } from "@/lib/avis"
+import { fetchAvisDept, fetchAvisIndex, type AvisCommune } from "@/lib/avis"
 import { deptFromCodeCommune } from "@/lib/commune"
 import { useMeta } from "@/hooks/useMeta"
+
+/** Index des communes couvertes par l'analyse d'avis (marqueurs carte). */
+export function useAvisIndex(enabled: boolean) {
+  const { data: meta } = useMeta()
+  const hasAvis = (meta?.nb_communes_avis ?? 0) > 0
+  return useQuery({
+    queryKey: ["avis-index", meta?.base],
+    queryFn: () => fetchAvisIndex(meta!.base),
+    enabled: enabled && !!meta && hasAvis,
+    staleTime: Infinity,
+  })
+}
 
 /**
  * Analyse d'avis d'une commune. Chargée à la demande (la section Avis est le

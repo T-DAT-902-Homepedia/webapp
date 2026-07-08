@@ -32,6 +32,11 @@ import {
 } from "@/lib/choropleth"
 import { featureBbox, featureCentroids, type Bbox } from "@/lib/centroids"
 import { makeColorScale } from "@/lib/colorScale"
+import {
+  BubbleLegend,
+  HeatLegend,
+  QuantileLegend,
+} from "@/components/map-legend"
 import { formatEuroM2, formatInt, formatSigned } from "@/lib/format"
 
 const INITIAL_VIEW_STATE: MapViewState = {
@@ -202,7 +207,7 @@ export default function DvfMap() {
       stroked: true,
       // En mode bulles, la choroplèthe devient un simple fond de repérage.
       opacity: representation === "bubbles" ? 0.15 : 1,
-      getFillColor: (f) => colorScale(f as ChoroplethFeature),
+      getFillColor: (f) => colorScale.getColor(f as ChoroplethFeature),
       getLineColor: [255, 255, 255, 120],
       lineWidthMinPixels: 0.5,
       pickable: true,
@@ -222,7 +227,7 @@ export default function DvfMap() {
         data: { type: "FeatureCollection" as const, features: high.features },
         filled: true,
         stroked: true,
-        getFillColor: (f) => colorScale(f as ChoroplethFeature),
+        getFillColor: (f) => colorScale.getColor(f as ChoroplethFeature),
         getLineColor: [255, 255, 255, 150],
         lineWidthMinPixels: 0.5,
         pickable: true,
@@ -245,7 +250,7 @@ export default function DvfMap() {
       radiusMinPixels: 1,
       radiusMaxPixels: 80,
       getFillColor: (c: (typeof centroids)[number]) =>
-        colorScale(c.feature),
+        colorScale.getColor(c.feature),
       stroked: true,
       getLineColor: [255, 255, 255, 180],
       lineWidthMinPixels: 0.5,
@@ -389,6 +394,31 @@ export default function DvfMap() {
         )}
         {loading && !metaError && (
           <div className="mt-2 text-xs text-muted-foreground">Chargement…</div>
+        )}
+      </div>
+
+      {/* Légende (bornes réelles de l'échelle courante) */}
+      <div className="absolute right-4 bottom-4 flex flex-col items-end gap-2">
+        {heat ? (
+          <HeatLegend
+            weightLabel={heatWeight === "prix" ? "pondérée par le prix" : "nombre de ventes"}
+            contours={contours}
+          />
+        ) : (
+          <>
+            {representation === "bubbles" && <BubbleLegend maxValue={maxNb} />}
+            <QuantileLegend
+              title={`Prix médian (€/m²)${typeLocal !== "Tous" ? ` — ${typeLocal.toLowerCase()}s` : ""}`}
+              thresholds={colorScale.thresholds}
+              palette={colorScale.palette}
+              format={(v) => formatInt(v)}
+              footer={
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Couleur atténuée : moins de 5 ventes.
+                </p>
+              }
+            />
+          </>
         )}
       </div>
 

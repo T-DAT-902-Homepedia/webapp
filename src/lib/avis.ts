@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { artifactUrl } from "@/lib/data"
+import { GAP_NEG_HEX, GAP_POS_HEX } from "@/lib/palettes"
 
 // Analyse d'avis d'habitants (ville-ideale.fr, NLP CamemBERT côté pipeline) :
 // un JSON par département couvert (`avis/{dept}.json`). Couverture partielle
@@ -59,6 +60,24 @@ export async function fetchAvisDept(base: string, dept: string): Promise<AvisCom
   return z.array(avisCommuneSchema).parse(await res.json())
 }
 
+// Index des communes couvertes (avis/index.json) : centres pour poser les
+// marqueurs « avis » sur la carte sans télécharger les analyses complètes.
+export const avisIndexEntrySchema = z.object({
+  c: z.string(), // code commune
+  n: z.string().nullable(), // nom
+  n_avis: z.number(),
+  lng: z.number(),
+  lat: z.number(),
+})
+export type AvisIndexEntry = z.infer<typeof avisIndexEntrySchema>
+
+export async function fetchAvisIndex(base: string): Promise<AvisIndexEntry[]> {
+  const res = await fetch(artifactUrl(base, "avis/index.json"))
+  if (res.status === 404) return []
+  if (!res.ok) throw new Error(`CDN avis/index.json -> ${res.status} ${res.statusText}`)
+  return z.array(avisIndexEntrySchema).parse(await res.json())
+}
+
 // Thèmes du lexique NLP (pipelines/ville_ideale nlp/themes.py).
 export const AVIS_THEMES: { id: string; label: string }[] = [
   { id: "securite", label: "Sécurité" },
@@ -72,10 +91,10 @@ export const AVIS_THEMES: { id: string; label: string }[] = [
 export const themeLabel = (id: string | null): string =>
   AVIS_THEMES.find((t) => t.id === id)?.label ?? (id ?? "Autre")
 
-// Sémantique divergente PRGn, alignée sur la palette du gap de la carte
-// (vert = positif, violet = négatif) — CVD-safe, identique light/dark.
+// Sémantique divergente PRGn, partagée avec le gap (lib/palettes.ts) :
+// vert = positif, violet = négatif — CVD-safe, identique light/dark.
 export const SENTIMENT_COLORS: Record<string, string> = {
-  positive: "#1b7837",
-  negative: "#762a83",
+  positive: GAP_POS_HEX,
+  negative: GAP_NEG_HEX,
   neutral: "var(--muted-foreground)",
 }

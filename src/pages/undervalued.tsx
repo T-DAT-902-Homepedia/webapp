@@ -12,6 +12,7 @@ import { PageShell } from "@/components/page-shell"
 import { LoadingHint, ErrorHint } from "@/components/status-hint"
 import { Sparkline } from "@/components/sparkline"
 import { cn } from "@/lib/utils"
+import { GAP_TEXT_NEG, GAP_TEXT_POS } from "@/lib/palettes"
 import { type ScoreProperties } from "@/lib/score"
 import { usePrixSeries } from "@/hooks/usePrixSeries"
 import { useScore } from "@/hooks/useScore"
@@ -208,9 +209,7 @@ export default function Undervalued() {
                       <td
                         className={cn(
                           "px-3 py-2 text-right font-semibold tabular-nums",
-                          (p.gap_pondere ?? 0) > 0
-                            ? "text-accent"
-                            : "text-destructive",
+                          (p.gap_pondere ?? 0) > 0 ? GAP_TEXT_POS : GAP_TEXT_NEG,
                         )}
                       >
                         {(p.gap_pondere ?? 0) >= 0 ? "+" : ""}

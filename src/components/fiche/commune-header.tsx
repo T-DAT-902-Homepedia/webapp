@@ -4,6 +4,7 @@ import { GitCompareArrows, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { Fiche } from "@/lib/commune"
 import { formatEuroM2, formatInt, formatScore, formatSigned } from "@/lib/format"
+import { GAP_TEXT_NEG, GAP_TEXT_POS } from "@/lib/palettes"
 import { cn } from "@/lib/utils"
 
 function Tile({
@@ -23,8 +24,8 @@ function Tile({
       <div
         className={cn(
           "mt-1 text-lg font-semibold tabular-nums",
-          tone === "positive" && "text-accent",
-          tone === "negative" && "text-destructive",
+          tone === "positive" && GAP_TEXT_POS,
+          tone === "negative" && GAP_TEXT_NEG,
         )}
       >
         {value}

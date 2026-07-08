@@ -3,13 +3,20 @@ import { ArrowLeft, Check, ChevronDown, Info } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
+import {
+  BivariateLegend,
+  DivergingLegend,
+  QuantileLegend,
+} from "@/components/map-legend"
 import { cn } from "@/lib/utils"
 import {
+  DIMENSIONS,
   METRIC_INFO,
   METRIC_LABELS,
+  PRIX_METRICS,
   type Metric,
 } from "@/lib/score"
-import { BIVAR_PALETTE, DIV_LEGEND, SEQ_LEGEND } from "@/lib/scoreColors"
+import type { makeBivariateScale, MetricScale } from "@/lib/scoreColors"
 
 export type Basemap = "clair" | "sombre" | "satellite" | "couleur"
 export const BASEMAP_LABELS: Record<Basemap, string> = {
@@ -33,11 +40,23 @@ const CENTERS: { label: string; view: MapView }[] = [
   { label: "Mayotte", view: { center: [45.16, -12.83], zoom: 10 } },
 ]
 
+// Groupes du sélecteur : hiérarchie mentale claire au lieu d'une liste plate
+// de 17 entrées (audit L4).
+const METRIC_GROUPS: { title: string; metrics: Metric[] }[] = [
+  { title: "Synthèse", metrics: ["score_valeur", "gap_pondere"] },
+  { title: "Prix (€/m²)", metrics: [...PRIX_METRICS] },
+  { title: "Qualité de vie (dimensions)", metrics: [...DIMENSIONS] },
+]
+
 type ScoreSidebarProps = {
   metrics: Metric[]
   metric: Metric
   onMetric: (m: Metric) => void
-  diverging: boolean
+  /** Échelle courante (bornes réelles pour la légende chiffrée). */
+  scale: MetricScale
+  bivarScale: ReturnType<typeof makeBivariateScale> | null
+  format: (v: number) => string
+  formatY: (v: number) => string
   opacity: number
   onOpacity: (v: number) => void
   basemap: Basemap
@@ -110,7 +129,10 @@ export function ScoreSidebar({
   metrics,
   metric,
   onMetric,
-  diverging,
+  scale,
+  bivarScale,
+  format,
+  formatY,
   opacity,
   onOpacity,
   basemap,
@@ -125,8 +147,6 @@ export function ScoreSidebar({
   wordCloudEnabled,
   onWordCloudEnabled,
 }: ScoreSidebarProps) {
-  const legend = diverging ? DIV_LEGEND : SEQ_LEGEND
-
   return (
     <Tooltip.Provider>
       <aside className="flex h-svh w-80 shrink-0 flex-col overflow-y-auto border-r bg-card text-card-foreground">
@@ -148,33 +168,40 @@ export function ScoreSidebar({
           <p className="mt-0.5 text-xs text-muted-foreground">
             Choisissez la métrique à cartographier.
           </p>
-          <div className="mt-2 space-y-0.5">
-            {metrics.map((m) => {
-              const active = m === metric
-              return (
-                <div
-                  key={m}
-                  className={cn(
-                    "flex items-center gap-1 rounded-md pr-1.5 transition-colors",
-                    active ? "bg-secondary" : "hover:bg-muted",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onMetric(m)}
-                    className={cn(
-                      "flex-1 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                      active
-                        ? "font-medium text-accent"
-                        : "text-foreground/80",
-                    )}
-                  >
-                    {METRIC_LABELS[m]}
-                  </button>
-                  <InfoTip text={METRIC_INFO[m]} label={METRIC_LABELS[m]} />
+          <div className="mt-2 space-y-2.5">
+            {METRIC_GROUPS.map((group) => (
+              <div key={group.title}>
+                <div className="mb-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  {group.title}
                 </div>
-              )
-            })}
+                <div className="space-y-0.5">
+                  {group.metrics.map((m) => {
+                    const active = m === metric
+                    return (
+                      <div
+                        key={m}
+                        className={cn(
+                          "flex items-center gap-1 rounded-md pr-1.5 transition-colors",
+                          active ? "bg-secondary" : "hover:bg-muted",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => onMetric(m)}
+                          className={cn(
+                            "flex-1 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                            active ? "font-medium text-accent" : "text-foreground/80",
+                          )}
+                        >
+                          {METRIC_LABELS[m]}
+                        </button>
+                        <InfoTip text={METRIC_INFO[m]} label={METRIC_LABELS[m]} />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Mode bivarié : croise la métrique courante avec une seconde. */}
@@ -209,58 +236,27 @@ export function ScoreSidebar({
             </select>
           )}
 
-          {/* Légende : matrice 3×3 en bivarié, dégradé sinon. */}
-          {bivariate ? (
-            <div className="mt-3 flex items-end gap-2.5">
-              {/* Lignes du haut vers le bas = classe y décroissante (élevé en haut). */}
-              <div className="flex flex-col gap-px">
-                {[2, 1, 0].map((y) => (
-                  <div key={y} className="flex gap-px">
-                    {[0, 1, 2].map((x) => {
-                      const c = BIVAR_PALETTE[y][x]
-                      return (
-                        <div
-                          key={x}
-                          className="size-4"
-                          style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
-                        />
-                      )
-                    })}
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-0.5 text-[10px] leading-tight text-muted-foreground">
-                <div>→ {METRIC_LABELS[metric]} (faible → élevé)</div>
-                <div>↑ {METRIC_LABELS[metricY]} (faible → élevé)</div>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-3">
-              <div className="flex h-2 overflow-hidden rounded-sm">
-                {legend.map((c, i) => (
-                  <div
-                    key={i}
-                    className="flex-1"
-                    style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
-                  />
-                ))}
-              </div>
-              <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-                {diverging ? (
-                  <>
-                    <span>Cher</span>
-                    <span>Neutre</span>
-                    <span>Bon rapport</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Faible</span>
-                    <span>Élevé</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Légende CHIFFRÉE : les bornes affichées sont celles de l'échelle. */}
+          <div className="mt-3">
+            {bivariate && bivarScale ? (
+              <BivariateLegend
+                xLabel={METRIC_LABELS[metric]}
+                yLabel={METRIC_LABELS[metricY]}
+                tx={bivarScale.tx}
+                ty={bivarScale.ty}
+                formatX={format}
+                formatY={formatY}
+              />
+            ) : scale.kind === "diverging" ? (
+              <DivergingLegend bound={scale.bound} format={format} />
+            ) : (
+              <QuantileLegend
+                thresholds={scale.thresholds}
+                palette={scale.palette}
+                format={format}
+              />
+            )}
+          </div>
 
           {isLoading && (
             <div className="mt-2 text-xs text-muted-foreground">Chargement…</div>
@@ -314,12 +310,7 @@ export function ScoreSidebar({
                 <Button
                   key={b}
                   size="sm"
-                  variant={b === basemap ? "default" : "outline"}
-                  className={
-                    b === basemap
-                      ? "bg-accent text-accent-foreground hover:bg-accent/90"
-                      : undefined
-                  }
+                  variant={b === basemap ? "accent" : "outline"}
                   onClick={() => onBasemap(b)}
                 >
                   {BASEMAP_LABELS[b]}

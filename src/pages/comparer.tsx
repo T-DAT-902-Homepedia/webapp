@@ -18,6 +18,7 @@ import {
   formatScore,
   formatSigned,
 } from "@/lib/format"
+import { GAP_TEXT_NEG, GAP_TEXT_POS } from "@/lib/palettes"
 import { cn } from "@/lib/utils"
 
 // Comparaison de deux communes côte à côte. L'URL (?a=&b=) est la source de
@@ -81,7 +82,7 @@ function SlotCard({
               <div
                 className={cn(
                   "font-semibold tabular-nums",
-                  (fiche.score?.gap_pondere ?? 0) >= 0 ? "text-accent" : "text-destructive",
+                  (fiche.score?.gap_pondere ?? 0) >= 0 ? GAP_TEXT_POS : GAP_TEXT_NEG,
                 )}
               >
                 {formatSigned(fiche.score?.gap_pondere)}

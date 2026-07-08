@@ -12,6 +12,7 @@ import {
 } from "recharts"
 
 import { useChoropleth } from "@/hooks/useChoropleth"
+import { GAP_PRGN_HEX } from "@/lib/palettes"
 import { stratifiedSample } from "@/lib/sampling"
 import { formatEuroM2, formatScore, formatSigned } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -24,13 +25,10 @@ import { cn } from "@/lib/utils"
 
 const TARGET_POINTS = 4000
 
-// PRGn 7 classes (mêmes valeurs que la palette gap de la carte).
-const PRGN = ["#762a83", "#af8dc3", "#e7d4e8", "#f7f7f7", "#d9f0d3", "#7fbf7b", "#1b7837"]
-
 function gapColor(gap: number | null | undefined, spread: number): string {
   if (gap == null) return "#9ca3af"
   const t = Math.max(-1, Math.min(1, gap / spread))
-  return PRGN[Math.round(((t + 1) / 2) * (PRGN.length - 1))]
+  return GAP_PRGN_HEX[Math.round(((t + 1) / 2) * (GAP_PRGN_HEX.length - 1))]
 }
 
 interface Point {

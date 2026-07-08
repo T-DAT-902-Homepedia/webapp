@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts"
 
+import { GAP_NEG_HEX, GAP_POS_HEX, GAP_TEXT_NEG, GAP_TEXT_POS } from "@/lib/palettes"
 import { fetchRegionStats, type RegionStats } from "@/lib/regions"
 import { useMeta } from "@/hooks/useMeta"
 import { formatEuroM2, formatInt, formatScore, formatSigned } from "@/lib/format"
@@ -129,8 +130,8 @@ export function RegionsPanel() {
                 fill={
                   metric === "gap"
                     ? (d.valeur ?? 0) >= 0
-                      ? "#1b7837"
-                      : "#762a83"
+                      ? GAP_POS_HEX
+                      : GAP_NEG_HEX
                     : "var(--chart-1)"
                 }
               />
@@ -174,7 +175,7 @@ export function RegionsPanel() {
                 <td
                   className={cn(
                     "px-3 py-2 text-right font-semibold tabular-nums",
-                    (r.gap_pondere_median ?? 0) >= 0 ? "text-accent" : "text-destructive",
+                    (r.gap_pondere_median ?? 0) >= 0 ? GAP_TEXT_POS : GAP_TEXT_NEG,
                   )}
                 >
                   {formatSigned(r.gap_pondere_median)}

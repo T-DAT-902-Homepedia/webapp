@@ -1,74 +1,92 @@
-import type { CityWordCloud, WordEntry } from "@/lib/parseAvis";
+import { Dialog } from "radix-ui"
+import { Link } from "react-router-dom"
+import { ArrowRight, X } from "lucide-react"
 
-const COLORS = [
-  "#6366f1", "#8b5cf6", "#ec4899", "#f59e0b",
-  "#10b981", "#3b82f6", "#f43f5e", "#14b8a6",
-];
+import { WordCloud } from "@/components/avis/word-cloud"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { useAvis } from "@/hooks/useAvis"
+import { formatSigned } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
-interface Props {
-  city: CityWordCloud;
-  onClose: () => void;
-}
+// Nuage de mots d'une ville depuis la carte : Radix Dialog (focus trap,
+// Escape, aria) aux tokens du thème, alimenté par les artefacts avis/ du CDN
+// et rendu par le même composant WordCloud que la fiche commune — une seule
+// implémentation, une seule palette (sentiment PRGn).
 
-export default function WordCloudPopup({ city, onClose }: Props) {
-  const words: WordEntry[] = city.words;
+export default function WordCloudPopup({
+  code,
+  nom,
+  onClose,
+}: {
+  code: string
+  nom: string
+  onClose: () => void
+}) {
+  const { data: avis, isLoading } = useAvis(code)
+  const sentiment = avis?.sentiment_global
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-        zIndex: 1000,
-        background: "rgba(15,15,25,0.97)",
-        borderRadius: 16,
-        padding: "24px 28px",
-        minWidth: 340,
-        maxWidth: 520,
-        boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
-        color: "#fff",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{city.nom_ville}</h2>
-        <button
-          onClick={onClose}
-          style={{ background: "none", border: "none", color: "#aaa", fontSize: 22, cursor: "pointer", lineHeight: 1 }}
+    <Dialog.Root open onOpenChange={(v) => !v && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45" />
+        <Dialog.Content
+          className="fixed top-1/2 left-1/2 z-50 w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-background p-5 text-foreground shadow-2xl focus:outline-none"
+          aria-describedby={undefined}
         >
-          ×
-        </button>
-      </div>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <Dialog.Title className="font-display text-lg font-bold tracking-tight">
+                {nom} — ce qu'en disent les habitants
+              </Dialog.Title>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {avis && <span>{avis.n_avis} avis · {avis.source ?? "Ville-idéale"}</span>}
+                {sentiment != null && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      sentiment >= 0.15 &&
+                        "border-[#1b7837]/40 text-[#1b7837] dark:text-[#7fbf7b]",
+                      sentiment <= -0.15 &&
+                        "border-[#762a83]/40 text-[#762a83] dark:text-[#af8dc3]",
+                    )}
+                  >
+                    Sentiment {formatSigned(sentiment)}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <Dialog.Close asChild>
+              <Button variant="ghost" size="icon" aria-label="Fermer">
+                <X className="size-4" />
+              </Button>
+            </Dialog.Close>
+          </div>
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "8px 12px",
-          justifyContent: "center",
-          padding: "8px 0",
-          minHeight: 120,
-        }}
-      >
-        {words.map(({ word, size }, i) => (
-          <span
-            key={word}
-            style={{
-              fontSize: size,
-              color: COLORS[i % COLORS.length],
-              fontWeight: size > 30 ? 700 : size > 20 ? 600 : 400,
-              lineHeight: 1.2,
-              cursor: "default",
-            }}
-          >
-            {word}
-          </span>
-        ))}
-      </div>
+          <div className="mt-3">
+            {isLoading ? (
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                Chargement des avis…
+              </p>
+            ) : avis?.wordcloud?.length ? (
+              <WordCloud words={avis.wordcloud} activeTheme={null} />
+            ) : (
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                Pas assez de texte exploitable pour cette ville.
+              </p>
+            )}
+          </div>
 
-      <p style={{ margin: "12px 0 0", fontSize: 12, color: "#666", textAlign: "right" }}>
-        Source : ville-ideale.fr
-      </p>
-    </div>
-  );
+          <div className="mt-3 flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/commune/${code}`}>
+                Fiche complète (thèmes, verbatims)
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
 }
