@@ -2,17 +2,17 @@ import { z } from "zod"
 
 import { artifactUrl, fetchJson } from "@/lib/data"
 
-export type TypeLocal = "Maison" | "Appartement" // PR2 le remplace par TypeLocalFilter
+export type TypeLocal = "Tous" | "Maison" | "Appartement"
 export type Lod = "low" | "mid" | "high"
-export type Mesh = "departements" | "communes"
+export type Mesh = "regions" | "departements" | "communes"
 
 // --- Schémas zod : valident les GeoJSON choroplèthe du CDN ---------------------
 
-// Le GeoJSON contient les trois familles de colonnes (tous types, maison, appart) :
-// changer de type de local ne déclenche aucun refetch, uniquement un recalcul de
-// couleurs côté client (cf. statsForType).
+// Le GeoJSON contient les trois familles de colonnes (tous types, maison,
+// appart) : changer de type de local ne déclenche aucun refetch, uniquement un
+// recalcul de couleurs côté client (cf. statsForType). Le schéma couvre les
+// trois mailles (région/département/commune), chacune n'ayant que ses codes.
 export const choroplethPropertiesSchema = z.object({
-  code_departement: z.string(),
   nom: z.string(),
   prix_m2_median: z.number().nullable(),
   nb_transactions: z.number(),
@@ -23,10 +23,34 @@ export const choroplethPropertiesSchema = z.object({
   appart_prix_m2_median: z.number().nullable(),
   appart_nb_transactions: z.number(),
   appart_fiable: z.boolean(),
-  // Maille commune uniquement :
+  // Maille département :
+  code_departement: z.string().optional(),
+  nom_region: z.string().nullable().optional(),
+  // Mailles département (rattachement) et région :
+  code_region: z.string().nullable().optional(),
+  score_median: z.number().nullable().optional(),
+  gap_pondere_median: z.number().nullable().optional(),
+  nb_communes_scorees: z.number().optional(),
+  // Maille commune :
   code_commune: z.string().optional(),
   score_valeur: z.number().nullable().optional(),
+  gap: z.number().nullable().optional(),
   gap_pondere: z.number().nullable().optional(),
+  dpe_dominant: z.string().nullable().optional(),
+  // Les 12 dimensions normalisées du score (valeurs communales, médianes aux
+  // mailles département/région — mêmes noms à toutes les mailles).
+  n_prix: z.number().nullable().optional(),
+  n_transport: z.number().nullable().optional(),
+  n_access_fin: z.number().nullable().optional(),
+  n_risques: z.number().nullable().optional(),
+  n_tourisme: z.number().nullable().optional(),
+  n_securite: z.number().nullable().optional(),
+  n_services: z.number().nullable().optional(),
+  n_loisirs: z.number().nullable().optional(),
+  n_ensoleillement: z.number().nullable().optional(),
+  n_emploi: z.number().nullable().optional(),
+  n_proximite: z.number().nullable().optional(),
+  n_dpe: z.number().nullable().optional(),
 })
 export type ChoroplethProperties = z.infer<typeof choroplethPropertiesSchema>
 
@@ -66,12 +90,13 @@ export function normalizeGeometry(geom: Geometry | null): Geometry | null {
 
 // --- Chemins d'artefacts --------------------------------------------------------
 
-/** Mapping (mesh, lod) -> chemin d'artefact. PR1 : high communes clampé à mid. */
+/** Mapping (mesh, lod) -> chemin d'artefact. */
 export function choroplethPath(mesh: Mesh, lod: Lod, codeDepartement?: string): string {
+  if (mesh === "regions") return "choropleth/regions-low.geojson"
   if (mesh === "departements")
     return `choropleth/departements-${lod === "low" ? "low" : "mid"}.geojson`
   if (lod === "high" && codeDepartement)
-    return `choropleth/communes-high/${codeDepartement}.geojson` // utilisé à partir de PR3
+    return `choropleth/communes-high/${codeDepartement}.geojson`
   return `choropleth/communes-mid.geojson`
 }
 
@@ -98,5 +123,7 @@ export function statsForType(
 ): { prix: number | null; nb: number; fiable: boolean } {
   if (t === "Maison")
     return { prix: p.maison_prix_m2_median, nb: p.maison_nb_transactions, fiable: p.maison_fiable }
-  return { prix: p.appart_prix_m2_median, nb: p.appart_nb_transactions, fiable: p.appart_fiable }
+  if (t === "Appartement")
+    return { prix: p.appart_prix_m2_median, nb: p.appart_nb_transactions, fiable: p.appart_fiable }
+  return { prix: p.prix_m2_median, nb: p.nb_transactions, fiable: p.fiable }
 }

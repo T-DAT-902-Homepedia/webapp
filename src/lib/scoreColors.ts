@@ -1,36 +1,45 @@
-import { quantileScale, type RGBA } from "@/lib/colorScale"
+import { quantileScale, quantileThresholds } from "@/lib/colorScale"
+import {
+  BIVAR_3X3,
+  GAP_MID,
+  GAP_NEG,
+  GAP_POS,
+  NO_DATA,
+  PRICE_SEQ,
+  SCORE_SEQ,
+  type RGBA,
+} from "@/lib/palettes"
 
-const NO_DATA: RGBA = [200, 200, 200, 60]
+// Échelles de la carte /map. Les palettes vivent dans lib/palettes.ts (source
+// unique inter-pages) ; ici seulement la mécanique quantiles/divergent/bivarié.
 
-// --- Séquentiel (score global + dimensions, valeurs dans [0, 1]) ---------------
-
-// Palette séquentielle bleu-vert (viridis-like tronquée) : lisible sur fonds clair
-// et sombre, distincte du DVF (jaune-rouge) et du transport (vert).
-const SEQ_PALETTE: RGBA[] = [
-  [237, 248, 251, 255],
-  [191, 211, 230, 255],
-  [158, 188, 218, 255],
-  [140, 150, 198, 255],
-  [136, 86, 167, 255],
-  [129, 15, 124, 255],
-]
-
-/** Échelle séquentielle par quantiles sur des valeurs 0–1 (score, dimensions).
- *
- * Quantiles rang-based (robustes aux distributions resserrées des dimensions
- * normalisées) via le helper partagé `quantileScale`. Les NULL -> gris "no data".
- */
-export function makeSequentialScale(values: (number | null | undefined)[]) {
-  return quantileScale(values, SEQ_PALETTE, NO_DATA)
+export interface SequentialScale {
+  kind: "sequential"
+  color(v: number | null | undefined): RGBA
+  /** Bornes de classes (légende chiffrée), croissantes. */
+  thresholds: number[]
+  palette: RGBA[]
 }
 
-// --- Divergent (gap_pondere, centré sur 0) -------------------------------------
+/** Échelle séquentielle par quantiles. Palette par défaut : score (bleu-violet) ;
+ *  passer PRICE_SEQ pour les métriques en €/m² (YlOrRd, comme /carte). */
+export function makeSequentialScale(
+  values: (number | null | undefined)[],
+  palette: RGBA[] = SCORE_SEQ,
+): SequentialScale {
+  return {
+    kind: "sequential",
+    color: quantileScale(values, palette, NO_DATA),
+    thresholds: quantileThresholds(values, palette.length),
+    palette,
+  }
+}
 
-// Rouge (négatif = cher pour ce qu'offre la commune) -> blanc (neutre) ->
-// bleu (positif = bon rapport qualité/prix). Symétrique autour de 0.
-const NEG: RGBA = [202, 0, 32, 255] // gap très négatif
-const MID: RGBA = [247, 247, 247, 255] // ~0
-const POS: RGBA = [5, 113, 176, 255] // gap très positif
+/** Échelle prix : mêmes quantiles, palette YlOrRd partagée avec /carte. */
+export const makePriceScale = (values: (number | null | undefined)[]) =>
+  makeSequentialScale(values, PRICE_SEQ)
+
+// --- Divergent (gap_pondere, centré sur 0, PRGn) --------------------------------
 
 function lerp(a: RGBA, b: RGBA, t: number): RGBA {
   return [
@@ -41,46 +50,57 @@ function lerp(a: RGBA, b: RGBA, t: number): RGBA {
   ]
 }
 
-/** Échelle divergente centrée sur 0. L'amplitude est bornée au quantile 95 des
- *  |valeurs| pour que quelques extrêmes n'aplatissent pas tout le dégradé. */
-export function makeDivergingScale(values: (number | null | undefined)[]) {
+export interface DivergingScale {
+  kind: "diverging"
+  color(v: number | null | undefined): RGBA
+  /** Amplitude robuste : le dégradé couvre [-bound, +bound]. */
+  bound: number
+}
+
+/** Échelle divergente PRGn centrée sur 0 (violet = surcoté, vert = sous-coté).
+ *  L'amplitude est bornée au quantile 95 des |valeurs| pour que quelques
+ *  extrêmes n'aplatissent pas tout le dégradé — exposée pour la légende. */
+export function makeDivergingScale(
+  values: (number | null | undefined)[],
+): DivergingScale {
   const mags = values
     .filter((v): v is number => v != null)
     .map(Math.abs)
     .sort((a, b) => a - b)
   const bound = mags.length ? mags[Math.floor(0.95 * (mags.length - 1))] || 1 : 1
 
-  return function color(v: number | null | undefined): RGBA {
-    if (v == null) return NO_DATA
-    const t = Math.max(-1, Math.min(1, v / bound)) // [-1, 1]
-    return t < 0 ? lerp(MID, NEG, -t) : lerp(MID, POS, t)
+  return {
+    kind: "diverging",
+    bound,
+    color(v: number | null | undefined): RGBA {
+      if (v == null) return NO_DATA
+      const t = Math.max(-1, Math.min(1, v / bound)) // [-1, 1]
+      return t < 0 ? lerp(GAP_MID, GAP_NEG, -t) : lerp(GAP_MID, GAP_POS, t)
+    },
   }
 }
 
-// Rampe pour la légende (échantillon régulier de la palette séquentielle).
-export const SEQ_LEGEND = SEQ_PALETTE
+export type MetricScale = SequentialScale | DivergingScale
+
 // Rampe divergente pour la légende (NEG -> MID -> POS).
-export const DIV_LEGEND: RGBA[] = [NEG, lerp(MID, NEG, 0.5), MID, lerp(MID, POS, 0.5), POS]
+export const DIV_LEGEND: RGBA[] = [
+  GAP_NEG,
+  lerp(GAP_MID, GAP_NEG, 0.5),
+  GAP_MID,
+  lerp(GAP_MID, GAP_POS, 0.5),
+  GAP_POS,
+]
 
 // --- Bivarié (croisement de 2 métriques, 3×3) -----------------------------------
 
-// Palette bivariée 3×3 « bleu-violet » (Joshua Stevens) : BIVAR_PALETTE[y][x],
-// x = classe de la 1re métrique (colonnes), y = classe de la 2e (lignes),
-// classe 0 = faible. Le coin [2][2] (élevé × élevé) est le plus saturé.
-export const BIVAR_PALETTE: RGBA[][] = [
-  [[232, 232, 232, 255], [172, 228, 228, 255], [90, 200, 200, 255]],
-  [[223, 176, 214, 255], [165, 173, 211, 255], [86, 152, 185, 255]],
-  [[190, 100, 172, 255], [140, 98, 170, 255], [59, 73, 148, 255]],
-]
+export const BIVAR_PALETTE = BIVAR_3X3
 
 export const BIVAR_CLASS_LABELS = ["faible", "moyen", "élevé"] as const
 
-// Seuils de terciles rang-based (même approche que quantileScale, mais ici on a
-// besoin de l'indice de classe pour le tooltip, pas seulement de la couleur).
+// Seuils de terciles rang-based (même approche que quantileThresholds, mais on
+// a besoin de l'indice de classe pour le tooltip, pas seulement de la couleur).
 function tercileThresholds(values: (number | null | undefined)[]): number[] {
-  const sorted = values.filter((v): v is number => v != null).sort((a, b) => a - b)
-  if (sorted.length < 2) return []
-  return [1, 2].map((i) => sorted[Math.floor((i / 3) * (sorted.length - 1))])
+  return quantileThresholds(values, 3)
 }
 
 function classOf(thresholds: number[], v: number): number {
@@ -89,8 +109,8 @@ function classOf(thresholds: number[], v: number): number {
   return c
 }
 
-/** Échelle bivariée 3×3 par terciles : couleur + classes (pour le tooltip).
- *  Une valeur manquante sur l'un des deux axes -> gris « no data ». */
+/** Échelle bivariée 3×3 par terciles : couleur + classes (tooltip) + seuils
+ *  (légende chiffrée). Une valeur manquante sur l'un des deux axes -> gris. */
 export function makeBivariateScale(
   xs: (number | null | undefined)[],
   ys: (number | null | undefined)[],
@@ -98,6 +118,9 @@ export function makeBivariateScale(
   const tx = tercileThresholds(xs)
   const ty = tercileThresholds(ys)
   return {
+    /** Seuils de terciles de chaque axe (pour la légende). */
+    tx,
+    ty,
     /** Classes [x, y] dans {0,1,2}, ou null si l'une des valeurs manque. */
     classes(
       x: number | null | undefined,

@@ -39,7 +39,7 @@ export function Sparkline({
   const trendUp = last != null && last >= first
 
   const title = values
-    .map((v, i) => `${labels[i]} : ${v != null ? `${v.toLocaleString("fr-FR")} €/m²` : "n/d"}`)
+    .map((v, i) => `${labels[i]} : ${v != null ? `${v.toLocaleString("fr-FR")} €/m²` : "—"}`)
     .join("\n")
 
   return (

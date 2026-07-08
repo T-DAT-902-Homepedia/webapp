@@ -8,12 +8,18 @@ export const DATA_URL: string =
 // meta.json est le seul fichier muté du bucket (cache HTTP 5 min) : il donne le
 // run courant (`base`) sous lequel vivent tous les artefacts immuables.
 export const metaSchema = z.object({
-  schema_version: z.literal(1),
+  // Tolère un futur bump : les évolutions du pipeline sont additives, un
+  // numéro inconnu ne doit pas casser la carte (les champs requis restent
+  // validés champ à champ).
+  schema_version: z.number(),
   run_date: z.string(),
   year: z.number(),
   base: z.string(), // ex. "runs/2026-07-02"
   nb_communes: z.number(),
   nb_communes_scorees: z.number(),
+  // Communes couvertes par l'analyse d'avis (0 ou absent = pas d'avis dans ce
+  // run : les sections Avis se masquent d'elles-mêmes).
+  nb_communes_avis: z.number().optional(),
   generated_at: z.string(),
 })
 export type Meta = z.infer<typeof metaSchema>

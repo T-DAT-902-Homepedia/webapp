@@ -1,13 +1,21 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  GitCompareArrows,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { PageShell } from "@/components/page-shell"
+import { LoadingHint, ErrorHint } from "@/components/status-hint"
 import { Sparkline } from "@/components/sparkline"
 import { cn } from "@/lib/utils"
-import { fetchScore, type ScoreProperties } from "@/lib/score"
+import { GAP_TEXT_NEG, GAP_TEXT_POS } from "@/lib/palettes"
+import { type ScoreProperties } from "@/lib/score"
 import { usePrixSeries } from "@/hooks/usePrixSeries"
+import { useScore } from "@/hooks/useScore"
 
 // Le livrable actionnable de la problématique (#34) : classement des communes
 // « sous-cotées » — gap_pondere positif = bien notée pour son prix. V1 sans
@@ -43,11 +51,8 @@ export default function Undervalued() {
   const [dep, setDep] = useState("")
   const [limit, setLimit] = useState(PAGE)
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["score"], // même cache que la carte : pas de re-téléchargement.
-    queryFn: fetchScore,
-    staleTime: Infinity,
-  })
+  // Même cache que la carte /map : pas de re-téléchargement.
+  const { data, isLoading, isError } = useScore()
 
   // Séries de prix pour les sparklines. En cas d'échec la table s'affiche
   // quand même (colonne à « — ») : la couche charts est optionnelle ici.
@@ -90,24 +95,10 @@ export default function Undervalued() {
   const visible = sorted.slice(0, limit)
 
   return (
-    <div className="min-h-svh bg-background text-foreground">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-6 py-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/" aria-label="Retour à l'accueil">
-              <ArrowLeft className="size-4" />
-            </Link>
-          </Button>
-          <span className="font-display text-lg font-bold tracking-tight">
-            Homepedia<span className="text-accent">.</span>
-          </span>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="font-display text-3xl font-bold tracking-tight">
-          Communes sous-cotées
-        </h1>
+    <PageShell>
+      <h1 className="font-display text-3xl font-bold tracking-tight">
+        Communes sous-cotées
+      </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
           L'écart qualité/prix compare la qualité du territoire (transport,
           sécurité, climat, services…) à son niveau de prix.{" "}
@@ -142,14 +133,8 @@ export default function Undervalued() {
           </span>
         </div>
 
-        {isLoading && (
-          <div className="mt-8 text-sm text-muted-foreground">Chargement…</div>
-        )}
-        {isError && (
-          <div className="mt-8 text-sm text-destructive">
-            Données indisponibles
-          </div>
-        )}
+        {isLoading && <LoadingHint className="mt-8" />}
+        {isError && <ErrorHint className="mt-8" />}
 
         {!isLoading && !isError && (
           <>
@@ -224,9 +209,7 @@ export default function Undervalued() {
                       <td
                         className={cn(
                           "px-3 py-2 text-right font-semibold tabular-nums",
-                          (p.gap_pondere ?? 0) > 0
-                            ? "text-accent"
-                            : "text-destructive",
+                          (p.gap_pondere ?? 0) > 0 ? GAP_TEXT_POS : GAP_TEXT_NEG,
                         )}
                       >
                         {(p.gap_pondere ?? 0) >= 0 ? "+" : ""}
@@ -240,12 +223,23 @@ export default function Undervalued() {
                           />
                         </td>
                       )}
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
                         <Button size="sm" variant="ghost" asChild>
-                          <Link to={`/map?commune=${p.code_commune}`}>
-                            Carte
+                          <Link to={`/commune/${p.code_commune}`}>
+                            Fiche
                             <ArrowRight className="size-3.5" />
                           </Link>
+                        </Button>
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link
+                            to={`/comparer?a=${p.code_commune}`}
+                            aria-label="Comparer cette commune"
+                          >
+                            <GitCompareArrows className="size-3.5" />
+                          </Link>
+                        </Button>
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link to={`/map?commune=${p.code_commune}`}>Carte</Link>
                         </Button>
                       </td>
                     </tr>
@@ -267,7 +261,6 @@ export default function Undervalued() {
             )}
           </>
         )}
-      </main>
-    </div>
+    </PageShell>
   )
 }

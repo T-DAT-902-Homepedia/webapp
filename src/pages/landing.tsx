@@ -4,13 +4,30 @@ import { Link } from "react-router-dom"
 import { FranceOutline } from "@/components/france-outline"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useMeta } from "@/hooks/useMeta"
+import { NAV } from "@/lib/nav"
+import { formatInt } from "@/lib/format"
+import type { Meta } from "@/lib/data"
 
-const STATS = [
-  { value: "34 935", label: "communes couvertes" },
-  { value: "5M+", label: "transactions DVF analysées" },
-  { value: "13", label: "régions comparables" },
-  { value: "10 ans", label: "d'historique de prix" },
-]
+// Chiffres réels du run courant (meta.json) ; repli sur les derniers connus
+// tant que meta charge (évite un flash de zéros).
+function buildStats(meta: Meta | undefined) {
+  return [
+    {
+      value: meta ? formatInt(meta.nb_communes) : "34 933",
+      label: "communes couvertes",
+    },
+    {
+      value: meta ? formatInt(meta.nb_communes_scorees) : "17 774",
+      label: "communes notées qualité de vie",
+    },
+    { value: "18", label: "régions comparables" },
+    {
+      value: meta ? String(meta.year) : "2024",
+      label: "millésime DVF analysé",
+    },
+  ]
+}
 
 const FEATURES = [
   {
@@ -34,6 +51,8 @@ const FEATURES = [
 ]
 
 export function Landing() {
+  const { data: meta } = useMeta()
+  const STATS = buildStats(meta)
   return (
     <div className="min-h-svh bg-background text-foreground">
       {/* Header */}
@@ -42,19 +61,20 @@ export function Landing() {
           <span className="font-display text-xl font-bold tracking-tight">
             Homepedia<span className="text-accent">.</span>
           </span>
-          <nav className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <a href="#fonctionnalites">Fonctionnalités</a>
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/classement">Communes sous-cotées</Link>
-            </Button>
-            <Button
-              size="sm"
-              className="bg-accent text-accent-foreground hover:bg-accent/90"
-              asChild
-            >
-              <Link to="/map">
+          <nav className="flex items-center gap-1 sm:gap-2">
+            {NAV.map((item) => (
+              <Button
+                key={item.to}
+                variant="ghost"
+                size="sm"
+                asChild
+                className="max-sm:hidden"
+              >
+                <Link to={item.to}>{item.label}</Link>
+              </Button>
+            ))}
+            <Button size="sm" variant="accent" asChild>
+              <Link to="/carte">
                 Explorer la carte
                 <ArrowRight className="size-4" />
               </Link>
@@ -90,18 +110,14 @@ export function Landing() {
             ville par ville, quartier par quartier.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
-            <Button
-              size="lg"
-              className="bg-accent text-accent-foreground hover:bg-accent/90"
-              asChild
-            >
-              <Link to="/map">
-                Explorer la carte
+            <Button size="lg" variant="accent" asChild>
+              <Link to="/carte">
+                Explorer la carte des prix
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
-              <a href="#fonctionnalites">Découvrir les fonctionnalités</a>
+              <Link to="/map">Analyser la qualité de vie</Link>
             </Button>
           </div>
         </div>
@@ -154,6 +170,23 @@ export function Landing() {
           <p className="text-sm text-muted-foreground">
             Homepedia — projet de data-visualisation immobilière.
           </p>
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            {NAV.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {item.label}
+              </Link>
+            ))}
+            <Link
+              to="/comparer"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Comparer
+            </Link>
+          </nav>
           <p className="text-sm text-muted-foreground">
             Données : DVF (Etalab) · INSEE
           </p>
