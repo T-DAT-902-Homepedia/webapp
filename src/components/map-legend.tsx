@@ -1,7 +1,13 @@
 import type { ReactNode } from "react"
 
 import { DIV_LEGEND } from "@/lib/scoreColors"
-import { BIVAR_3X3, rgbaToCss, type RGBA } from "@/lib/palettes"
+import {
+  BIVAR_3X3,
+  PRICE_HEAT_SEQ,
+  rgbaToCss,
+  rgbaToCssAlpha,
+  type RGBA,
+} from "@/lib/palettes"
 import { formatInt } from "@/lib/format"
 
 // Légendes de cartes CHIFFRÉES : les bornes affichées sont exactement celles
@@ -184,27 +190,47 @@ export function BubbleLegend({ maxValue, title }: { maxValue: number; title?: st
   )
 }
 
-/** Légende heatmap : gradient de densité + seuils des isolignes le cas échéant. */
+/** Légende heatmap : dégradé construit sur la palette réelle de la couche
+ *  (PRICE_HEAT_SEQ). Mode « prix » : bornes chiffrées du colorDomain (€/m²) ;
+ *  mode « ventes » : densité relative Faible → Forte. */
 export function HeatLegend({
-  weightLabel,
+  mode,
+  domain,
   contours,
 }: {
-  weightLabel: string
+  mode: "prix" | "ventes"
+  /** Bornes réelles du colorDomain en €/m² (mode prix uniquement). */
+  domain?: [number, number]
   contours: boolean
 }) {
+  const stops = PRICE_HEAT_SEQ.map(rgbaToCss)
+  // En densité, le bas de rampe fond en transparence (threshold de la couche).
+  const gradient =
+    mode === "ventes"
+      ? `linear-gradient(to right, ${rgbaToCssAlpha(PRICE_HEAT_SEQ[0], 0)}, ${stops.join(", ")})`
+      : `linear-gradient(to right, ${stops.join(", ")})`
   return (
-    <LegendCard title={`Densité (${weightLabel})`}>
-      <div
-        className="h-2 w-44 rounded-sm"
-        style={{
-          background:
-            "linear-gradient(to right, rgba(255,255,178,0), #fed976, #fd8d3c, #f03b20, #bd0026)",
-        }}
-      />
-      <div className="mt-0.5 flex w-44 justify-between text-[10px] text-muted-foreground">
-        <span>Faible</span>
-        <span>Forte</span>
-      </div>
+    <LegendCard
+      title={mode === "prix" ? "Prix moyen lissé (€/m²)" : "Densité (nombre de ventes)"}
+    >
+      <div className="h-2 w-44 rounded-sm" style={{ background: gradient }} />
+      {mode === "prix" && domain ? (
+        <>
+          <div className="mt-0.5 flex w-44 justify-between tabular-nums text-muted-foreground">
+            <span>{formatInt(domain[0])}</span>
+            <span>{formatInt((domain[0] + domain[1]) / 2)}</span>
+            <span>{formatInt(domain[1])}</span>
+          </div>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Sous {formatInt(domain[0])} €/m² : fondu transparent.
+          </p>
+        </>
+      ) : (
+        <div className="mt-0.5 flex w-44 justify-between text-[10px] text-muted-foreground">
+          <span>Faible</span>
+          <span>Forte</span>
+        </div>
+      )}
       {contours && (
         <div className="mt-1.5 space-y-0.5 text-muted-foreground">
           {[

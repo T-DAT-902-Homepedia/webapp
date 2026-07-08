@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { GeoJsonLayer, ScatterplotLayer, type Layer } from "deck.gl"
+import { GeoJsonLayer, ScatterplotLayer } from "deck.gl"
 import type { MapViewState, PickingInfo } from "@deck.gl/core"
-import { MapboxOverlay } from "@deck.gl/mapbox"
-import Map, { useControl, type MapRef } from "react-map-gl/maplibre"
-import type {
-  IControl,
-  Map as MaplibreMap,
-  StyleSpecification,
-} from "maplibre-gl"
+import Map, { type MapRef } from "react-map-gl/maplibre"
+import type { Map as MaplibreMap, StyleSpecification } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import {
@@ -30,6 +25,7 @@ import {
   makeSequentialScale,
 } from "@/lib/scoreColors"
 import { Button } from "@/components/ui/button"
+import { DeckOverlay } from "@/components/deck-overlay"
 import { MapTopBar } from "@/components/map-top-bar"
 import { ScoreSidebar, type Basemap, type MapView } from "@/components/score-sidebar"
 import WordCloudPopup from "@/components/WordCloudPopup"
@@ -137,16 +133,6 @@ function fmt(metric: Metric, v: number | null | undefined): string {
   if (metric === "gap_pondere") return (v >= 0 ? "+" : "") + v.toFixed(2)
   if (EURO_METRICS.has(metric)) return `${Math.round(v).toLocaleString("fr-FR")} €/m²`
   return v.toFixed(2)
-}
-
-/** Overlay deck.gl interleavé : les couches s'insèrent DANS la pile maplibre
- *  (via beforeId), donc sous les labels du fond de carte qui restent lisibles. */
-function DeckOverlay({ layers }: { layers: Layer[] }) {
-  const overlay = useControl(
-    () => new MapboxOverlay({ interleaved: true, layers }) as unknown as IControl,
-  )
-  ;(overlay as unknown as MapboxOverlay).setProps({ layers })
-  return null
 }
 
 export default function ScoreMap() {
