@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react"
-import DeckGL from "@deck.gl/react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ContourLayer, GeoJsonLayer, HeatmapLayer, ScatterplotLayer } from "deck.gl"
 import { WebMercatorViewport, type MapViewState } from "@deck.gl/core"
-import Map from "react-map-gl/maplibre"
+import Map, { type MapRef } from "react-map-gl/maplibre"
+import type { Map as MaplibreMap } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { Checkbox } from "radix-ui"
 import { Check, ChevronRight } from "lucide-react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
+import { DeckOverlay } from "@/components/deck-overlay"
 import { MapTopBar } from "@/components/map-top-bar"
 import { useChoropleth } from "@/hooks/useChoropleth"
 import {
@@ -33,7 +34,7 @@ import {
 } from "@/lib/choropleth"
 import { featureBbox, featureCentroids, type Bbox } from "@/lib/centroids"
 import { makeColorScale, quantileScale, quantileThresholds } from "@/lib/colorScale"
-import { PRICE_SEQ } from "@/lib/palettes"
+import { PRICE_HEAT_SEQ, PRICE_SEQ } from "@/lib/palettes"
 import {
   BubbleLegend,
   HeatLegend,
@@ -65,6 +66,11 @@ const MESH_LABEL = { regions: "régions", departements: "départements", commune
 // Au-delà de ce zoom, la heatmap laisse place aux mutations individuelles.
 const POINTS_ZOOM = 11
 
+// Domaine de couleur du mode « prix » (MEAN, €/m²) : bornes fixes pour que la
+// couleur garde le même sens quel que soit le filtre de type ou le chargement.
+// Sous la borne basse, l'alpha du shader fond la nappe en transparence.
+const HEAT_PRICE_DOMAIN: [number, number] = [1500, 6000]
+
 // --- État dans l'URL (partage/refresh, audit N4) ----------------------------
 // v=lat,lng,zoom ; repr= ; type= ; poids= ; iso=1
 
@@ -86,9 +92,16 @@ interface DrillStep {
 
 export default function DvfMap() {
   const [params, setParams] = useSearchParams()
-  const [viewState, setViewState] = useState<MapViewState>(
+  // Vue initiale depuis l'URL, figée au montage (la carte est non contrôlée) ;
+  // viewState devient ensuite un miroir passif alimenté par onMove.
+  const [initialView] = useState<MapViewState>(
     () => parseViewParam(params.get("v")) ?? INITIAL_VIEW_STATE,
   )
+  const [viewState, setViewState] = useState<MapViewState>(initialView)
+  const mapRef = useRef<MapRef>(null)
+  // Premier calque de symboles du style : les couches deck passent dessous
+  // (beforeId), les labels du fond restent lisibles.
+  const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
   const [hovered, setHovered] = useState<ChoroplethFeature | null>(null)
   const [hoveredPoint, setHoveredPoint] = useState<{ prix: number; t: string } | null>(
     null,
@@ -100,9 +113,10 @@ export default function DvfMap() {
   const setTypeLocal = useFilters((s) => s.setTypeLocal)
   const representation = useFilters((s) => s.representation)
   const setRepresentation = useFilters((s) => s.setRepresentation)
-  // Pondération de la heatmap : densité de ventes ou niveau de prix.
+  // Pondération de la heatmap : niveau de prix (défaut — la page est une carte
+  // des prix) ou densité de ventes. Les anciens liens ?poids=prix restent valides.
   const [heatWeight, setHeatWeight] = useState<"ventes" | "prix">(() =>
-    params.get("poids") === "prix" ? "prix" : "ventes",
+    params.get("poids") === "ventes" ? "ventes" : "prix",
   )
   const [contours, setContours] = useState(() => params.get("iso") === "1")
 
@@ -134,7 +148,7 @@ export default function DvfMap() {
     if (representation !== "choropleth") next.set("repr", representation)
     if (typeLocal !== "Tous") next.set("type", typeLocal)
     if (representation === "heat") {
-      if (heatWeight !== "ventes") next.set("poids", heatWeight)
+      if (heatWeight !== "prix") next.set("poids", heatWeight)
       if (contours) next.set("iso", "1")
     }
     setParams(next, { replace: true })
@@ -170,6 +184,15 @@ export default function DvfMap() {
   const visibleDepts = useVisibleDepartements(debouncedBounds)
   const high = useCommunesHigh(visibleDepts, highEnabled)
 
+  // Animation de cadrage : easeTo maplibre (linéaire, proche de l'ancienne
+  // transition deck 600 ms) ; onMove alimente viewState pendant l'animation.
+  const easeToView = (view: MapViewState) =>
+    mapRef.current?.easeTo({
+      center: [view.longitude ?? 0, view.latitude ?? 0],
+      zoom: view.zoom ?? 5,
+      duration: 600,
+    })
+
   // Drill-down : clic sur une région/un département -> cadrage sur son emprise
   // (la maille suivante prend le relais via meshForZoom) ; sur une commune ->
   // fiche détaillée.
@@ -181,8 +204,9 @@ export default function DvfMap() {
     }
     const bbox = featureBbox(f)
     if (!bbox) return
+    // fitBounds ne dépend que de l'emprise et de la taille d'écran, pas de la
+    // vue courante.
     const viewport = new WebMercatorViewport({
-      ...viewState,
       width: window.innerWidth,
       height: window.innerHeight,
     })
@@ -194,14 +218,12 @@ export default function DvfMap() {
       { padding: 48 },
     )
     const nextView: MapViewState = {
-      ...viewState,
       longitude: target.longitude,
       latitude: target.latitude,
       // Garantit le changement de maille même sur les grandes emprises (DROM).
       zoom: Math.max(target.zoom, f.properties.code_region != null ? 5.6 : 8.1),
-      transitionDuration: 600,
     }
-    setViewState(nextView)
+    easeToView(nextView)
     const step: DrillStep = { label: f.properties.nom, view: nextView }
     setDrillPath((path) =>
       f.properties.code_region != null ? [step] : [...path.slice(0, 1), step],
@@ -211,11 +233,7 @@ export default function DvfMap() {
   // Retour à une étape du fil d'Ariane (index -1 = France entière).
   const goToStep = (index: number) => {
     setDrillPath((path) => path.slice(0, index + 1))
-    setViewState(
-      index < 0
-        ? { ...INITIAL_VIEW_STATE, transitionDuration: 600 }
-        : { ...drillPath[index].view, transitionDuration: 600 },
-    )
+    easeToView(index < 0 ? INITIAL_VIEW_STATE : drillPath[index].view)
   }
 
   // Accessors mémoïsés : changer de type recolore la couche sans la recréer ni
@@ -269,12 +287,16 @@ export default function DvfMap() {
   }, [showPoints, heatPoints])
 
   const layers = useMemo(() => {
+    // beforeId glisse chaque couche sous les labels du fond (prop runtime de
+    // @deck.gl/mapbox, non typée en v8) ; spread conditionnel pour le type.
+    const underLabels = fillBeforeId ? { beforeId: fillBeforeId } : {}
     if (heat) {
       if (showPoints && pointColor) {
         return [
           new ScatterplotLayer({
             id: "transactions-points",
             data: heatPoints,
+            ...underLabels,
             getPosition: (pt: { lon: number; lat: number }) => [pt.lon, pt.lat],
             getFillColor: (pt: { prix: number }) => pointColor.color(pt.prix),
             radiusUnits: "pixels",
@@ -291,21 +313,35 @@ export default function DvfMap() {
           }),
         ]
       }
+      // Mode « prix » : MEAN lit le colorDomain tel quel en €/m² (seul SUM le
+      // rescale en m/px), intensity doit donc rester à 1 sous peine de décaler
+      // le domaine ; opacité réduite pour garder le fond lisible sous la nappe.
+      // Mode « ventes » : intensity > 1 sature Paris et révèle le reste (la
+      // normalisation se fait sur le max de densité à l'écran).
+      const prixMode = heatWeight === "prix"
       const heatmap = new HeatmapLayer({
         id: "transactions-heatmap",
         data: heatPoints,
+        ...underLabels,
         getPosition: (p: { lon: number; lat: number }) => [p.lon, p.lat],
-        getWeight:
-          heatWeight === "prix" ? (p: { prix: number }) => p.prix : () => 1,
+        colorRange: PRICE_HEAT_SEQ,
         // Rayon resserré à mesure que l'on zoome : le halo reste local.
-        radiusPixels: Math.min(45, Math.max(15, 60 - 4 * zoomDebounced)),
-        aggregation: "SUM",
+        radiusPixels: Math.min(28, Math.max(10, 38 - 2.8 * zoomDebounced)),
+        getWeight: prixMode ? (p: { prix: number }) => p.prix : () => 1,
+        aggregation: prixMode ? "MEAN" : "SUM",
+        colorDomain: prixMode ? HEAT_PRICE_DOMAIN : null,
+        intensity: prixMode ? 1 : 2,
+        // Fondu du bas de rampe ; sans effet en mode prix (colorDomain prime).
+        threshold: 0.04,
+        opacity: prixMode ? 0.6 : 0.8,
+        updateTriggers: { getWeight: [heatWeight] },
       })
       if (!contours) return [heatmap]
       // Isolignes de densité (nb de ventes par cellule d'environ 4 km).
       const contour = new ContourLayer({
         id: "transactions-contours",
         data: heatPoints,
+        ...underLabels,
         getPosition: (p: { lon: number; lat: number }) => [p.lon, p.lat],
         cellSize: 4000,
         contours: [
@@ -322,6 +358,7 @@ export default function DvfMap() {
       // reconstruire la couche, seulement repasser dans getFillColor.
       id: `choropleth-${mesh}-${lod}`,
       data: data ?? EMPTY_COLLECTION,
+      ...underLabels,
       filled: true,
       stroked: true,
       // En mode bulles, la choroplèthe devient un simple fond de repérage.
@@ -344,6 +381,7 @@ export default function DvfMap() {
       const highLayer = new GeoJsonLayer<ChoroplethFeature["properties"]>({
         id: "choropleth-communes-high",
         data: { type: "FeatureCollection" as const, features: high.features },
+        ...underLabels,
         filled: true,
         stroked: true,
         getFillColor: (f) => colorScale.getColor(f as ChoroplethFeature),
@@ -361,6 +399,7 @@ export default function DvfMap() {
     const bubbles = new ScatterplotLayer({
       id: `bubbles-${mesh}`,
       data: centroids,
+      ...underLabels,
       getPosition: (c: (typeof centroids)[number]) => c.position,
       // Aire proportionnelle au volume (racine du nb de transactions).
       getRadius: (c: (typeof centroids)[number]) =>
@@ -410,7 +449,24 @@ export default function DvfMap() {
     zoomDebounced,
     showPoints,
     pointColor,
+    fillBeforeId,
   ])
+
+  // Au (re)chargement du style, mémorise le 1er calque de symboles : c'est le
+  // beforeId sous lequel glisser les couches deck (labels au-dessus). Idempotent
+  // (même id -> pas de re-render), style Positron unique sur cette page.
+  const onStyleData = (map: MaplibreMap) => {
+    const symbol = (map.getStyle()?.layers ?? []).find((l) => l.type === "symbol")
+    setFillBeforeId(symbol?.id)
+  }
+
+  // Remplace le getCursor de DeckGL : pointer au survol d'une entité pickable,
+  // sinon retour au grab/grabbing CSS de maplibre (chaîne vide).
+  const hovering = heat ? showPoints && hoveredPoint != null : hovered != null
+  useEffect(() => {
+    const canvas = mapRef.current?.getCanvas()
+    if (canvas) canvas.style.cursor = hovering ? "pointer" : ""
+  }, [hovering])
 
   const hoveredStats = hovered ? statsForType(hovered.properties, typeLocal) : null
   const loading = isLoading || (heat && pointsLoading)
@@ -426,16 +482,16 @@ export default function DvfMap() {
           </Button>
         }
       />
-      <DeckGL
-        viewState={viewState}
-        onViewStateChange={(e) => setViewState(e.viewState as MapViewState)}
-        controller
-        layers={layers}
-        getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}
+      <Map
+        ref={mapRef}
+        initialViewState={initialView}
+        mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        onMove={(e) => setViewState(e.viewState)}
+        onStyleData={(e) => onStyleData(e.target)}
         style={{ width: "100%", height: "100%" }}
       >
-        <Map mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json" />
-      </DeckGL>
+        <DeckOverlay layers={layers} />
+      </Map>
 
       {/* Panneau de contrôle */}
       <div className="absolute top-16 left-4 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
@@ -567,7 +623,8 @@ export default function DvfMap() {
             />
           ) : (
             <HeatLegend
-              weightLabel={heatWeight === "prix" ? "pondérée par le prix" : "nombre de ventes"}
+              mode={heatWeight}
+              domain={heatWeight === "prix" ? HEAT_PRICE_DOMAIN : undefined}
               contours={contours}
             />
           )

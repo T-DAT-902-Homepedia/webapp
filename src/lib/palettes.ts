@@ -25,6 +25,10 @@ export const PRICE_SEQ: RGBA[] = [
   [189, 0, 38, 255],
 ]
 
+/** Variante heatmap : sans le 1er arrêt quasi blanc, illisible en nappe sur
+ *  fond clair (le fondu bas de rampe est assuré par l'alpha du shader). */
+export const PRICE_HEAT_SEQ: RGBA[] = PRICE_SEQ.slice(1)
+
 // --- Score & dimensions : séquentiel bleu-violet 6 classes -----------------------
 
 export const SCORE_SEQ: RGBA[] = [
@@ -73,3 +77,6 @@ export const BIVAR_3X3: RGBA[][] = [
 ]
 
 export const rgbaToCss = (c: RGBA) => `rgb(${c[0]},${c[1]},${c[2]})`
+
+export const rgbaToCssAlpha = (c: RGBA, a: number) =>
+  `rgba(${c[0]},${c[1]},${c[2]},${a})`
