@@ -4,7 +4,8 @@ import { ContourLayer, GeoJsonLayer, HeatmapLayer, ScatterplotLayer } from "deck
 import { WebMercatorViewport, type MapViewState } from "@deck.gl/core"
 import Map from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { ArrowLeft } from "lucide-react"
+import { Checkbox } from "radix-ui"
+import { ArrowLeft, Check } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -319,12 +320,7 @@ export default function DvfMap() {
             <Button
               key={r.id}
               size="sm"
-              variant={r.id === representation ? "default" : "outline"}
-              className={
-                r.id === representation
-                  ? "bg-accent text-accent-foreground hover:bg-accent/90"
-                  : undefined
-              }
+              variant={r.id === representation ? "accent" : "outline"}
               onClick={() => setRepresentation(r.id)}
             >
               {r.label}
@@ -337,12 +333,7 @@ export default function DvfMap() {
             <Button
               key={t}
               size="sm"
-              variant={t === typeLocal ? "default" : "outline"}
-              className={
-                t === typeLocal
-                  ? "bg-accent text-accent-foreground hover:bg-accent/90"
-                  : undefined
-              }
+              variant={t === typeLocal ? "accent" : "outline"}
               onClick={() => setTypeLocal(t)}
             >
               {t}
@@ -369,12 +360,16 @@ export default function DvfMap() {
                 </button>
               ))}
             </div>
-            <label className="flex items-center gap-2 text-muted-foreground">
-              <input
-                type="checkbox"
+            <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
+              <Checkbox.Root
                 checked={contours}
-                onChange={(e) => setContours(e.target.checked)}
-              />
+                onCheckedChange={(v) => setContours(v === true)}
+                className="flex size-4 shrink-0 items-center justify-center rounded border border-input bg-background data-[state=checked]:border-accent data-[state=checked]:bg-accent"
+              >
+                <Checkbox.Indicator>
+                  <Check className="size-3 text-accent-foreground" />
+                </Checkbox.Indicator>
+              </Checkbox.Root>
               Isolignes de densité
             </label>
           </div>
@@ -389,7 +384,7 @@ export default function DvfMap() {
 
         {metaError && (
           <div className="mt-2 max-w-52 text-xs text-destructive">
-            Impossible de charger les données. Réessayez plus tard.
+            Données indisponibles — réessayez plus tard.
           </div>
         )}
         {loading && !metaError && (

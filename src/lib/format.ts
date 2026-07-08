@@ -2,7 +2,10 @@
 // undefined rend un tiret cadratin : les feuilles du contrat CDN sont
 // individuellement nullables.
 
-const EMPTY = "—"
+/** Marqueur unique d'absence de donnée (bannit les « n/d » épars). */
+export const NA = "—"
+
+const EMPTY = NA
 
 export function formatEuroM2(v: number | null | undefined): string {
   if (v == null) return EMPTY

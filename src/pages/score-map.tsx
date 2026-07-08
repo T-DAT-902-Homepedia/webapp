@@ -138,7 +138,7 @@ export default function ScoreMap() {
   const [bivariate, setBivariate] = useState(false)
   const [metricY, setMetricY] = useState<Metric>("n_prix")
   const [opacity, setOpacity] = useState(0.8)
-  const [basemap, setBasemap] = useState<Basemap>("satellite")
+  const [basemap, setBasemap] = useState<Basemap>("clair")
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
   const [wordCloudEnabled, setWordCloudEnabled] = useState(false)
   const [selectedCity, setSelectedCity] = useState<CityWordCloud | null>(null)
@@ -385,7 +385,7 @@ export default function ScoreMap() {
             <div className="text-muted-foreground">
               {hovered.properties.prix != null
                 ? `${Math.round(hovered.properties.prix).toLocaleString("fr-FR")} €/m²`
-                : "prix n/d"}
+                : "prix —"}
             </div>
           </div>
         )}

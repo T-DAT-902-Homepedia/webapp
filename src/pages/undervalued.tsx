@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import {
-  ArrowLeft,
   ArrowRight,
   ChevronDown,
   ChevronUp,
@@ -9,6 +8,8 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { PageShell } from "@/components/page-shell"
+import { LoadingHint, ErrorHint } from "@/components/status-hint"
 import { Sparkline } from "@/components/sparkline"
 import { cn } from "@/lib/utils"
 import { type ScoreProperties } from "@/lib/score"
@@ -93,24 +94,10 @@ export default function Undervalued() {
   const visible = sorted.slice(0, limit)
 
   return (
-    <div className="min-h-svh bg-background text-foreground">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-6 py-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/" aria-label="Retour à l'accueil">
-              <ArrowLeft className="size-4" />
-            </Link>
-          </Button>
-          <span className="font-display text-lg font-bold tracking-tight">
-            Homepedia<span className="text-accent">.</span>
-          </span>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="font-display text-3xl font-bold tracking-tight">
-          Communes sous-cotées
-        </h1>
+    <PageShell>
+      <h1 className="font-display text-3xl font-bold tracking-tight">
+        Communes sous-cotées
+      </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
           L'écart qualité/prix compare la qualité du territoire (transport,
           sécurité, climat, services…) à son niveau de prix.{" "}
@@ -145,14 +132,8 @@ export default function Undervalued() {
           </span>
         </div>
 
-        {isLoading && (
-          <div className="mt-8 text-sm text-muted-foreground">Chargement…</div>
-        )}
-        {isError && (
-          <div className="mt-8 text-sm text-destructive">
-            Données indisponibles
-          </div>
-        )}
+        {isLoading && <LoadingHint className="mt-8" />}
+        {isError && <ErrorHint className="mt-8" />}
 
         {!isLoading && !isError && (
           <>
@@ -281,7 +262,6 @@ export default function Undervalued() {
             )}
           </>
         )}
-      </main>
-    </div>
+    </PageShell>
   )
 }

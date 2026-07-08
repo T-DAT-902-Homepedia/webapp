@@ -96,7 +96,7 @@ export function PriceHistogram({
         </div>
       </div>
       <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={bins} margin={{ top: 8, right: 12, bottom: 0, left: 8 }} barCategoryGap={1}>
+        <BarChart data={bins} margin={{ top: 20, right: 12, bottom: 0, left: 8 }} barCategoryGap={1}>
           <XAxis
             dataKey="from"
             tickFormatter={(v: number) => formatInt(v)}
@@ -138,7 +138,7 @@ export function PriceHistogram({
             strokeDasharray="4 4"
             label={{
               value: formatEuroM2(median),
-              position: "top",
+              position: "insideTopRight",
               fill: "var(--foreground)",
               fontSize: 11,
             }}

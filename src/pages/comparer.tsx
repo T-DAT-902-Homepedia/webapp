@@ -63,7 +63,7 @@ function SlotCard({
           <div className="text-xs text-muted-foreground">
             Dépt {fiche.code_departement} · {fiche.code_commune}
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+          <div className="mt-3 grid grid-cols-3 gap-2 text-sm max-sm:text-xs">
             <div>
               <div className="text-[10px] text-muted-foreground uppercase">Prix</div>
               <div className="font-semibold tabular-nums">

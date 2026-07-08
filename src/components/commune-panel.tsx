@@ -4,6 +4,7 @@ import { ArrowRight, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { ScoreFeature } from "@/lib/score"
+import { NA, formatEuroM2, formatInt } from "@/lib/format"
 import { ScoreRadar } from "@/components/score-radar"
 
 /** Petite tuile d'indicateur. */
@@ -27,8 +28,7 @@ export function CommunePanel({
   onClose: () => void
 }) {
   const p = feature.properties
-  const prix =
-    p.prix != null ? `${Math.round(p.prix).toLocaleString("fr-FR")} €/m²` : "n/d"
+  const prix = formatEuroM2(p.prix)
   const score = p.score_valeur != null ? p.score_valeur.toFixed(2) : "—"
   const gap =
     p.gap_pondere != null
@@ -61,8 +61,8 @@ export function CommunePanel({
         <Stat label="Prix médian" value={prix} />
         <Stat label="Score global" value={score} />
         <Stat label="Écart qualité/prix" value={gap} />
-        <Stat label="DPE dominant" value={p.dpe ?? "n/d"} />
-        <Stat label="Transactions" value={p.nb_transactions ?? "n/d"} />
+        <Stat label="DPE dominant" value={p.dpe ?? NA} />
+        <Stat label="Transactions" value={formatInt(p.nb_transactions)} />
       </div>
 
       <div className="border-t px-4 py-4">

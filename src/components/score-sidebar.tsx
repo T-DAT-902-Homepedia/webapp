@@ -267,7 +267,7 @@ export function ScoreSidebar({
           )}
           {isError && (
             <div className="mt-2 text-xs text-destructive">
-              Données indisponibles
+              Données indisponibles — réessayez plus tard.
             </div>
           )}
         </div>
