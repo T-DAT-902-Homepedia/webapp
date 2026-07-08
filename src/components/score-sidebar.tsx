@@ -1,6 +1,5 @@
 import { Accordion, Checkbox, Slider, Tooltip } from "radix-ui"
-import { ArrowLeft, Check, ChevronDown, Info } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Check, ChevronDown, Info } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -150,18 +149,6 @@ export function ScoreSidebar({
   return (
     <Tooltip.Provider>
       <aside className="flex h-svh w-80 shrink-0 flex-col overflow-y-auto border-r bg-card text-card-foreground">
-        {/* En-tête */}
-        <div className="flex items-center gap-3 border-b px-4 py-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/" aria-label="Retour à l'accueil">
-              <ArrowLeft className="size-4" />
-            </Link>
-          </Button>
-          <span className="font-display text-lg font-bold tracking-tight">
-            Homepedia<span className="text-accent">.</span>
-          </span>
-        </div>
-
         {/* Sélecteur de métrique : une ligne par catégorie, avec son « i ». */}
         <div className="px-4 py-3">
           <div className="text-sm font-semibold">Score territoire</div>

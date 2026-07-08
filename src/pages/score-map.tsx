@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { GeoJsonLayer, ScatterplotLayer, type Layer } from "deck.gl"
 import type { MapViewState, PickingInfo } from "@deck.gl/core"
 import { MapboxOverlay } from "@deck.gl/mapbox"
@@ -28,6 +28,8 @@ import {
   makePriceScale,
   makeSequentialScale,
 } from "@/lib/scoreColors"
+import { Button } from "@/components/ui/button"
+import { MapTopBar } from "@/components/map-top-bar"
 import { ScoreSidebar, type Basemap, type MapView } from "@/components/score-sidebar"
 import WordCloudPopup from "@/components/WordCloudPopup"
 import { CommunePanel } from "@/components/commune-panel"
@@ -66,6 +68,20 @@ const INITIAL_VIEW_STATE: MapViewState = {
   latitude: 46.6,
   zoom: 5,
 }
+
+// v=lat,lng,zoom — même convention que /carte (liens croisés entre cartes).
+function parseViewParam(v: string | null): MapViewState | null {
+  if (!v) return null
+  const [lat, lng, zoom] = v.split(",").map(Number)
+  if ([lat, lng, zoom].some((n) => !Number.isFinite(n))) return null
+  return { latitude: lat, longitude: lng, zoom }
+}
+
+const isMetric = (v: string | null): v is Metric =>
+  v != null && (METRICS as string[]).includes(v)
+
+const isBasemap = (v: string | null): v is Basemap =>
+  v === "clair" || v === "sombre" || v === "satellite" || v === "couleur"
 
 // Dézoom plafonné : au-delà on ne verrait plus que l'océan autour de la France.
 const MIN_ZOOM = 4
@@ -133,13 +149,23 @@ function DeckOverlay({ layers }: { layers: Layer[] }) {
 }
 
 export default function ScoreMap() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [hovered, setHovered] = useState<ScoreFeature | null>(null)
-  const [metric, setMetric] = useState<Metric>("score_valeur")
+  const [metric, setMetric] = useState<Metric>(() => {
+    const m = searchParams.get("m")
+    return isMetric(m) ? m : "score_valeur"
+  })
   // Mode bivarié : croise `metric` (axe x) avec `metricY` (axe y) sur 3×3 classes.
-  const [bivariate, setBivariate] = useState(false)
-  const [metricY, setMetricY] = useState<Metric>("n_prix")
+  const [bivariate, setBivariate] = useState(() => isMetric(searchParams.get("y")))
+  const [metricY, setMetricY] = useState<Metric>(() => {
+    const y = searchParams.get("y")
+    return isMetric(y) ? y : "n_prix"
+  })
   const [opacity, setOpacity] = useState(0.8)
-  const [basemap, setBasemap] = useState<Basemap>("clair")
+  const [basemap, setBasemap] = useState<Basemap>(() => {
+    const f = searchParams.get("fond")
+    return isBasemap(f) ? f : "clair"
+  })
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
   const [wordCloudEnabled, setWordCloudEnabled] = useState(false)
   const [selectedCity, setSelectedCity] = useState<{ code: string; nom: string } | null>(
@@ -151,6 +177,14 @@ export default function ScoreMap() {
   const centerOn = (view: MapView) =>
     mapRef.current?.flyTo({ center: view.center, zoom: view.zoom, duration: 1200 })
 
+  // Vue courante au format v= (lien croisé vers /carte).
+  const currentViewParam = () => {
+    const map = mapRef.current
+    if (!map) return ""
+    const c = map.getCenter()
+    return `${c.lat.toFixed(4)},${c.lng.toFixed(4)},${map.getZoom().toFixed(2)}`
+  }
+
   const { data, isLoading, isError } = useScore()
 
   // Marqueurs « avis » : index CDN (communes couvertes + centres), lazy.
@@ -158,7 +192,6 @@ export default function ScoreMap() {
 
   // Commune sélectionnée = source de vérité dans l'URL (?commune=<code>), pour un
   // deep-link partageable et rechargeable.
-  const [searchParams, setSearchParams] = useSearchParams()
   const selectedCode = searchParams.get("commune")
   const selected = useMemo(
     () =>
@@ -170,8 +203,36 @@ export default function ScoreMap() {
     [data, selectedCode],
   )
 
-  const selectCommune = (code: string) => setSearchParams({ commune: code })
-  const closePanel = () => setSearchParams({})
+  // Mises à jour FUSIONNANTES : chaque écrivain ne touche que sa clé (le
+  // setSearchParams({commune}) historique écrasait métrique/fond, audit A3).
+  const patchParams = (patch: Record<string, string | null>, replace = false) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        for (const [k, v] of Object.entries(patch)) {
+          if (v == null) next.delete(k)
+          else next.set(k, v)
+        }
+        return next
+      },
+      { replace },
+    )
+
+  const selectCommune = (code: string) => patchParams({ commune: code })
+  const closePanel = () => patchParams({ commune: null })
+
+  // Métrique / bivarié / fond dans l'URL (replace : pas de spam d'historique).
+  useEffect(() => {
+    patchParams(
+      {
+        m: metric === "score_valeur" ? null : metric,
+        y: bivariate ? metricY : null,
+        fond: basemap === "clair" ? null : basemap,
+      },
+      true,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metric, metricY, bivariate, basemap])
 
   // Échap ferme le panneau.
   useEffect(() => {
@@ -321,6 +382,12 @@ export default function ScoreMap() {
     setFillBeforeId(symbols[0]?.id)
   }
 
+  const initialView = useMemo(
+    () => parseViewParam(searchParams.get("v")) ?? INITIAL_VIEW_STATE,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
   return (
     <div className="flex h-svh w-svw overflow-hidden bg-background text-foreground">
       <ScoreSidebar
@@ -347,10 +414,25 @@ export default function ScoreMap() {
       />
 
       <div className="relative flex-1">
+        <MapTopBar
+          onSelectCommune={(entry) => selectCommune(entry.c)}
+          extra={
+            <Button variant="ghost" size="sm" asChild className="max-md:hidden">
+              <Link to={`/carte?v=${currentViewParam()}`}>Voir en prix</Link>
+            </Button>
+          }
+        />
         <Map
           ref={mapRef}
-          initialViewState={INITIAL_VIEW_STATE}
+          initialViewState={initialView}
           minZoom={MIN_ZOOM}
+          onMoveEnd={(e) => {
+            const c = e.viewState
+            patchParams(
+              { v: `${c.latitude.toFixed(4)},${c.longitude.toFixed(4)},${c.zoom.toFixed(2)}` },
+              true,
+            )
+          }}
           mapStyle={BASEMAP_STYLES[basemap]}
           // Rechargement complet au changement de fond (les styles Carto partagent
           // les mêmes ids ; le diff laisserait des libellés anglais résiduels).

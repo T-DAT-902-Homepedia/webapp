@@ -1,14 +1,15 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import DeckGL from "@deck.gl/react"
 import { ContourLayer, GeoJsonLayer, HeatmapLayer, ScatterplotLayer } from "deck.gl"
 import { WebMercatorViewport, type MapViewState } from "@deck.gl/core"
 import Map from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { Checkbox } from "radix-ui"
-import { ArrowLeft, Check } from "lucide-react"
-import { Link, useNavigate } from "react-router-dom"
+import { Check, ChevronRight } from "lucide-react"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
+import { MapTopBar } from "@/components/map-top-bar"
 import { useChoropleth } from "@/hooks/useChoropleth"
 import {
   HIGH_ZOOM_THRESHOLD,
@@ -31,13 +32,15 @@ import {
   type TypeLocal,
 } from "@/lib/choropleth"
 import { featureBbox, featureCentroids, type Bbox } from "@/lib/centroids"
-import { makeColorScale } from "@/lib/colorScale"
+import { makeColorScale, quantileScale, quantileThresholds } from "@/lib/colorScale"
+import { PRICE_SEQ } from "@/lib/palettes"
 import {
   BubbleLegend,
   HeatLegend,
   QuantileLegend,
 } from "@/components/map-legend"
 import { formatEuroM2, formatInt, formatSigned } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 const INITIAL_VIEW_STATE: MapViewState = {
   longitude: 2.4,
@@ -59,9 +62,38 @@ const EMPTY_COLLECTION = { type: "FeatureCollection" as const, features: [] }
 
 const MESH_LABEL = { regions: "régions", departements: "départements", communes: "communes" }
 
+// Au-delà de ce zoom, la heatmap laisse place aux mutations individuelles.
+const POINTS_ZOOM = 11
+
+// --- État dans l'URL (partage/refresh, audit N4) ----------------------------
+// v=lat,lng,zoom ; repr= ; type= ; poids= ; iso=1
+
+function parseViewParam(v: string | null): MapViewState | null {
+  if (!v) return null
+  const [lat, lng, zoom] = v.split(",").map(Number)
+  if ([lat, lng, zoom].some((n) => !Number.isFinite(n))) return null
+  return { latitude: lat, longitude: lng, zoom }
+}
+
+const viewParam = (v: MapViewState) =>
+  `${(v.latitude ?? 0).toFixed(4)},${(v.longitude ?? 0).toFixed(4)},${(v.zoom ?? 5).toFixed(2)}`
+
+/** Étape du fil d'Ariane de drill-down (retour par fitBounds mémorisé). */
+interface DrillStep {
+  label: string
+  view: MapViewState
+}
+
 export default function DvfMap() {
-  const [viewState, setViewState] = useState<MapViewState>(INITIAL_VIEW_STATE)
+  const [params, setParams] = useSearchParams()
+  const [viewState, setViewState] = useState<MapViewState>(
+    () => parseViewParam(params.get("v")) ?? INITIAL_VIEW_STATE,
+  )
   const [hovered, setHovered] = useState<ChoroplethFeature | null>(null)
+  const [hoveredPoint, setHoveredPoint] = useState<{ prix: number; t: string } | null>(
+    null,
+  )
+  const [drillPath, setDrillPath] = useState<DrillStep[]>([])
   const navigate = useNavigate()
 
   const typeLocal = useFilters((s) => s.typeLocal)
@@ -69,12 +101,50 @@ export default function DvfMap() {
   const representation = useFilters((s) => s.representation)
   const setRepresentation = useFilters((s) => s.setRepresentation)
   // Pondération de la heatmap : densité de ventes ou niveau de prix.
-  const [heatWeight, setHeatWeight] = useState<"ventes" | "prix">("ventes")
-  const [contours, setContours] = useState(false)
+  const [heatWeight, setHeatWeight] = useState<"ventes" | "prix">(() =>
+    params.get("poids") === "prix" ? "prix" : "ventes",
+  )
+  const [contours, setContours] = useState(() => params.get("iso") === "1")
+
+  // Filtres du store initialisés depuis l'URL (une fois, au montage).
+  useEffect(() => {
+    const repr = params.get("repr")
+    if (repr === "bubbles" || repr === "heat" || repr === "choropleth") {
+      useFilters.setState({ representation: repr })
+    }
+    const type = params.get("type")
+    if (type === "Maison" || type === "Appartement" || type === "Tous") {
+      useFilters.setState({ typeLocal: type })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const zoom = viewState.zoom ?? 5
   const mesh = meshForZoom(zoom)
   const lod = lodForZoom(zoom)
+  // Zoom débouncé pour les tailles adaptatives (évite un rebuild de couche
+  // par frame de zoom) et l'écriture de l'URL.
+  const debouncedView = useDebouncedValue(viewState, 300)
+  const zoomDebounced = debouncedView.zoom ?? zoom
+
+  // L'URL reflète l'état courant (replace : pas de spam de l'historique).
+  useEffect(() => {
+    const next = new URLSearchParams()
+    next.set("v", viewParam(debouncedView))
+    if (representation !== "choropleth") next.set("repr", representation)
+    if (typeLocal !== "Tous") next.set("type", typeLocal)
+    if (representation === "heat") {
+      if (heatWeight !== "ventes") next.set("poids", heatWeight)
+      if (contours) next.set("iso", "1")
+    }
+    setParams(next, { replace: true })
+  }, [debouncedView, representation, typeLocal, heatWeight, contours, setParams])
+
+  // Dézoom manuel : le fil d'Ariane se tronque au niveau réellement visible.
+  useEffect(() => {
+    if (mesh === "regions") setDrillPath([])
+    else if (mesh === "departements") setDrillPath((path) => path.slice(0, 1))
+  }, [mesh])
 
   const { isError: metaError } = useMeta()
   const { data, isLoading } = useChoropleth(mesh, lod)
@@ -123,14 +193,29 @@ export default function DvfMap() {
       ],
       { padding: 48 },
     )
-    setViewState({
+    const nextView: MapViewState = {
       ...viewState,
       longitude: target.longitude,
       latitude: target.latitude,
       // Garantit le changement de maille même sur les grandes emprises (DROM).
       zoom: Math.max(target.zoom, f.properties.code_region != null ? 5.6 : 8.1),
       transitionDuration: 600,
-    })
+    }
+    setViewState(nextView)
+    const step: DrillStep = { label: f.properties.nom, view: nextView }
+    setDrillPath((path) =>
+      f.properties.code_region != null ? [step] : [...path.slice(0, 1), step],
+    )
+  }
+
+  // Retour à une étape du fil d'Ariane (index -1 = France entière).
+  const goToStep = (index: number) => {
+    setDrillPath((path) => path.slice(0, index + 1))
+    setViewState(
+      index < 0
+        ? { ...INITIAL_VIEW_STATE, transitionDuration: 600 }
+        : { ...drillPath[index].view, transitionDuration: 600 },
+    )
   }
 
   // Accessors mémoïsés : changer de type recolore la couche sans la recréer ni
@@ -171,15 +256,49 @@ export default function DvfMap() {
     return points.filter((p) => p.t === t)
   }, [heat, points, typeLocal])
 
+  // À fort zoom en mode heat : les points individuels remplacent le halo,
+  // colorés par prix (mêmes quantiles YlOrRd que la choroplèthe).
+  const showPoints = heat && zoomDebounced >= POINTS_ZOOM
+  const pointColor = useMemo(() => {
+    if (!showPoints) return null
+    const values = heatPoints.map((pt) => pt.prix)
+    return {
+      color: quantileScale(values, PRICE_SEQ),
+      thresholds: quantileThresholds(values, PRICE_SEQ.length),
+    }
+  }, [showPoints, heatPoints])
+
   const layers = useMemo(() => {
     if (heat) {
+      if (showPoints && pointColor) {
+        return [
+          new ScatterplotLayer({
+            id: "transactions-points",
+            data: heatPoints,
+            getPosition: (pt: { lon: number; lat: number }) => [pt.lon, pt.lat],
+            getFillColor: (pt: { prix: number }) => pointColor.color(pt.prix),
+            radiusUnits: "pixels",
+            getRadius: 4,
+            stroked: true,
+            getLineColor: [255, 255, 255, 160],
+            lineWidthMinPixels: 0.5,
+            pickable: true,
+            onHover: (info) =>
+              setHoveredPoint(
+                (info.object as { prix: number; t: string } | undefined) ?? null,
+              ),
+            updateTriggers: { getFillColor: [pointColor] },
+          }),
+        ]
+      }
       const heatmap = new HeatmapLayer({
         id: "transactions-heatmap",
         data: heatPoints,
         getPosition: (p: { lon: number; lat: number }) => [p.lon, p.lat],
         getWeight:
           heatWeight === "prix" ? (p: { prix: number }) => p.prix : () => 1,
-        radiusPixels: 40,
+        // Rayon resserré à mesure que l'on zoome : le halo reste local.
+        radiusPixels: Math.min(45, Math.max(15, 60 - 4 * zoomDebounced)),
         aggregation: "SUM",
       })
       if (!contours) return [heatmap]
@@ -246,7 +365,9 @@ export default function DvfMap() {
       // Aire proportionnelle au volume (racine du nb de transactions).
       getRadius: (c: (typeof centroids)[number]) =>
         Math.sqrt(statsForType(c.feature.properties, typeLocal).nb / maxNb),
-      radiusScale: mesh === "communes" ? 4000 : 40000,
+      // Taille continue selon le zoom (débouncé) : plus de saut de palier
+      // entre les mailles, les bulles gardent une emprise écran stable.
+      radiusScale: 3000 * 2 ** (8.5 - zoomDebounced),
       radiusMinPixels: 1,
       radiusMaxPixels: 80,
       getFillColor: (c: (typeof centroids)[number]) =>
@@ -286,6 +407,9 @@ export default function DvfMap() {
     contours,
     highEnabled,
     high.features,
+    zoomDebounced,
+    showPoints,
+    pointColor,
   ])
 
   const hoveredStats = hovered ? statsForType(hovered.properties, typeLocal) : null
@@ -293,6 +417,15 @@ export default function DvfMap() {
 
   return (
     <div className="relative h-svh w-svw overflow-hidden bg-background text-foreground">
+      <MapTopBar
+        extra={
+          <Button variant="ghost" size="sm" asChild className="max-md:hidden">
+            <Link to={`/map?v=${viewParam(debouncedView)}`}>
+              Voir en qualité de vie
+            </Link>
+          </Button>
+        }
+      />
       <DeckGL
         viewState={viewState}
         onViewStateChange={(e) => setViewState(e.viewState as MapViewState)}
@@ -305,20 +438,45 @@ export default function DvfMap() {
       </DeckGL>
 
       {/* Panneau de contrôle */}
-      <div className="absolute top-4 left-4 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/" aria-label="Retour à l'accueil">
-              <ArrowLeft className="size-4" />
-            </Link>
-          </Button>
-          <span className="font-display text-lg font-bold tracking-tight">
-            Homepedia<span className="text-accent">.</span>
-          </span>
+      <div className="absolute top-16 left-4 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
+        <div className="text-sm font-semibold">
+          Prix au m² — {heat ? (showPoints ? "mutations (points)" : "mutations") : MESH_LABEL[mesh]}
         </div>
-        <div className="mt-3 text-sm font-semibold">
-          Prix au m² — {heat ? "mutations" : MESH_LABEL[mesh]}
-        </div>
+
+        {/* Fil d'Ariane du drill-down : on sait où on est, on peut remonter. */}
+        {!heat && (
+          <nav aria-label="Niveau de zoom" className="mt-1.5 flex flex-wrap items-center gap-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => goToStep(-1)}
+              className={cn(
+                "rounded px-1 py-0.5 transition-colors hover:bg-muted",
+                drillPath.length === 0
+                  ? "font-semibold text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              France
+            </button>
+            {drillPath.map((step, i) => (
+              <span key={step.label} className="flex items-center gap-0.5">
+                <ChevronRight className="size-3 text-muted-foreground" />
+                <button
+                  type="button"
+                  onClick={() => goToStep(i)}
+                  className={cn(
+                    "rounded px-1 py-0.5 transition-colors hover:bg-muted",
+                    i === drillPath.length - 1
+                      ? "font-semibold text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {step.label}
+                </button>
+              </span>
+            ))}
+          </nav>
+        )}
 
         <div className="mt-2 flex gap-1.5">
           {REPRESENTATIONS.map((r) => (
@@ -400,10 +558,19 @@ export default function DvfMap() {
       {/* Légende (bornes réelles de l'échelle courante) */}
       <div className="absolute right-4 bottom-4 flex flex-col items-end gap-2">
         {heat ? (
-          <HeatLegend
-            weightLabel={heatWeight === "prix" ? "pondérée par le prix" : "nombre de ventes"}
-            contours={contours}
-          />
+          showPoints && pointColor ? (
+            <QuantileLegend
+              title="Mutations (prix €/m²)"
+              thresholds={pointColor.thresholds}
+              palette={PRICE_SEQ}
+              format={(v) => formatInt(v)}
+            />
+          ) : (
+            <HeatLegend
+              weightLabel={heatWeight === "prix" ? "pondérée par le prix" : "nombre de ventes"}
+              contours={contours}
+            />
+          )
         ) : (
           <>
             {representation === "bubbles" && <BubbleLegend maxValue={maxNb} />}
@@ -421,6 +588,18 @@ export default function DvfMap() {
           </>
         )}
       </div>
+
+      {/* Tooltip mutation individuelle (mode heat zoomé) */}
+      {showPoints && hoveredPoint && (
+        <div className="absolute bottom-4 left-4 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
+          <span className="font-semibold text-accent">
+            {formatEuroM2(hoveredPoint.prix)}
+          </span>{" "}
+          <span className="text-muted-foreground">
+            · {hoveredPoint.t === "M" ? "maison" : "appartement"}
+          </span>
+        </div>
+      )}
 
       {/* Tooltip au survol */}
       {!heat && hovered && hoveredStats && (
