@@ -32,7 +32,8 @@ additives (le schéma zod tolère un futur bump).
 - Tout le reste est sous `{BASE}/{meta.base}/…`, **immuable** (cache-control 1 an,
   `immutable`) :
   - `choropleth/regions-low.geojson` (18 régions, agrégats recalculés sur les
-    transactions du millésime + médianes du score)
+    transactions du millésime + médianes du score, du gap et des 12 dimensions
+    `n_*` — mêmes noms qu'à la maille communale, pour la maille adaptative)
   - `choropleth/departements-low.geojson` (~120 Ko gz), `choropleth/departements-mid.geojson` (~800 Ko gz)
   - `choropleth/communes-mid.geojson` (~3,4 Mo gz, 34 928 features, national)
   - `choropleth/communes-high/{dept}.geojson` ×101 (`{dept}` ∈ 01…95, 2A, 2B, 971…976)
@@ -41,6 +42,8 @@ additives (le schéma zod tolère un futur bump).
   - `avis/{dept}.json` (départements couverts uniquement, **404 = normal**) :
     par commune `n_avis`, `sentiment_global`, `low_data`, `themes[]`,
     `wordcloud[]`, `verbatims[]` (NLP ville-ideale, ~80 grandes villes)
+  - `avis/index.json` : communes couvertes `{c, n, n_avis, lng, lat}`
+    (marqueurs de la carte, centroïdes des contours)
   - `stats/regions.json` (choroplèthe régionale sans géométrie, pour barres/tableau)
   - `points/transactions-sample.json` (~100k mutations `{lon, lat, prix, t}`,
     échantillon reproductible pour la heatmap — chargé lazy en mode heat)
@@ -57,7 +60,9 @@ départements, plus `score_median`, `gap_pondere_median`, `nb_communes_scorees`.
 **Properties GeoJSON départements** : `code_departement`, `nom`, `code_region`,
 `nom_region`, `prix_m2_median` (nullable), `nb_transactions`, `fiable`,
 `maison_prix_m2_median` (nullable), `maison_nb_transactions`, `maison_fiable`,
-`appart_prix_m2_median` (nullable), `appart_nb_transactions`, `appart_fiable`.
+`appart_prix_m2_median` (nullable), `appart_nb_transactions`, `appart_fiable`,
+plus les médianes du score : `score_median`, `gap_pondere_median`,
+`nb_communes_scorees` et les 12 dimensions `n_*`.
 
 **Properties GeoJSON communes** : les colonnes prix ci-dessus **plus**
 `code_commune`, `score_valeur`, `gap`, `gap_pondere`, `dpe_dominant` et les 12
