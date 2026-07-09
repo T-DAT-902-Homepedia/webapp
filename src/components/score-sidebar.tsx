@@ -62,6 +62,8 @@ type ScoreSidebarProps = {
   isError: boolean
   wordCloudEnabled: boolean
   onWordCloudEnabled: (v: boolean) => void
+  /** Couche quartier (IRIS) actuellement visible sur la carte. */
+  irisActive?: boolean
 }
 
 /** Bulle d'aide « i » réutilisée sur chaque métrique et titre de section. */
@@ -138,6 +140,7 @@ function SidebarContent({
   isError,
   wordCloudEnabled,
   onWordCloudEnabled,
+  irisActive,
 }: ScoreSidebarProps) {
   return (
     <>
@@ -247,6 +250,13 @@ function SidebarContent({
               />
             )}
           </div>
+
+          {irisActive && (
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              Maille quartier (IRIS) sur les grandes villes — score hérité de
+              la commune, prix et écart propres au quartier.
+            </p>
+          )}
 
           {isLoading && (
             <div className="mt-2 text-xs text-muted-foreground">Chargement…</div>

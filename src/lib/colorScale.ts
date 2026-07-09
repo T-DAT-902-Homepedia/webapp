@@ -44,6 +44,9 @@ export function quantileScale(
 
 export interface FeatureColorScale {
   getColor(f: ChoroplethFeature): RGBA
+  /** Couleur d'une valeur brute — mêmes seuils que getColor (couche IRIS :
+   *  un quartier se lit sur l'échelle calculée sur les communes). */
+  color(v: number | null | undefined, fiable?: boolean): RGBA
   /** Bornes de classes (pour la légende), croissantes. */
   thresholds: number[]
   palette: RGBA[]
@@ -62,14 +65,16 @@ export function makeColorScale(
   const values = features.map((f) => getValue(f.properties))
   const thresholds = quantileThresholds(values, PRICE_SEQ.length)
   const base = quantileScale(values, PRICE_SEQ)
+  const color = (v: number | null | undefined, fiable = true): RGBA => {
+    if (v == null) return NO_DATA
+    const rgba = base(v)
+    return fiable ? rgba : [rgba[0], rgba[1], rgba[2], 110]
+  }
   return {
     thresholds,
     palette: PRICE_SEQ,
-    getColor(feature: ChoroplethFeature): RGBA {
-      const v = getValue(feature.properties)
-      if (v == null) return NO_DATA
-      const rgba = base(v)
-      return getFiable(feature.properties) ? rgba : [rgba[0], rgba[1], rgba[2], 110]
-    },
+    color,
+    getColor: (feature: ChoroplethFeature): RGBA =>
+      color(getValue(feature.properties), getFiable(feature.properties)),
   }
 }

@@ -14,10 +14,11 @@ export const MAX_HIGH_DEPTS = 15
 /**
  * Codes des départements dont l'emprise intersecte le viewport, triés
  * (identité stable pour les queryKeys). Source : la choroplèthe
- * départementale low, déjà en cache après la vue initiale.
+ * départementale low, déjà en cache après la vue initiale. `enabled` évite
+ * son fetch tant qu'aucun consommateur n'en a besoin (carte score).
  */
-export function useVisibleDepartements(viewBounds: Bbox | null): string[] {
-  const { data: depts } = useChoropleth("departements", "low")
+export function useVisibleDepartements(viewBounds: Bbox | null, enabled = true): string[] {
+  const { data: depts } = useChoropleth("departements", "low", enabled)
   const bboxes = useMemo(
     () => (depts ? deptBboxes(depts.features) : new Map<string, Bbox>()),
     [depts],

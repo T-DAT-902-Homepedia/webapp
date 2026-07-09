@@ -4,6 +4,7 @@ import {
   GeoJsonLayer,
   HeatmapLayer,
   ScatterplotLayer,
+  type Layer,
 } from "deck.gl"
 import { WebMercatorViewport, type MapViewState } from "@deck.gl/core"
 import Map, { type MapRef } from "react-map-gl/maplibre"
@@ -42,6 +43,11 @@ import {
   useCommunesHigh,
   useVisibleDepartements,
 } from "@/hooks/useCommunesHigh"
+import {
+  IRIS_ZOOM_THRESHOLD,
+  useHasIris,
+  useIrisHigh,
+} from "@/hooks/useIrisHigh"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useMeta } from "@/hooks/useMeta"
 import { usePoints } from "@/hooks/usePoints"
@@ -57,6 +63,8 @@ import {
   type ChoroplethProperties,
   type TypeLocal,
 } from "@/lib/choropleth"
+import type { IrisFeature } from "@/lib/iris"
+import { IrisTooltipContent } from "@/components/iris-tooltip"
 import { featureBbox, featureCentroids, type Bbox } from "@/lib/centroids"
 import {
   makeColorScale,
@@ -174,6 +182,7 @@ export default function DvfMap() {
   // (beforeId), les labels du fond restent lisibles.
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
   const [hovered, setHovered] = useState<ChoroplethFeature | null>(null)
+  const [hoveredIris, setHoveredIris] = useState<IrisFeature | null>(null)
   const [hoveredPoint, setHoveredPoint] = useState<{
     prix: number
     t: string
@@ -279,6 +288,14 @@ export default function DvfMap() {
   const debouncedBounds = useDebouncedValue(bounds, 200)
   const visibleDepts = useVisibleDepartements(debouncedBounds)
   const high = useCommunesHigh(visibleDepts, highEnabled)
+
+  // Maille quartier (IRIS), superposée aux communes fines : seules les villes
+  // multi-IRIS en publient — ailleurs, la commune reste la lecture correcte.
+  // Prix « tous types » uniquement (pas de variantes maison/appart côté IRIS).
+  const hasIris = useHasIris()
+  const irisEnabled =
+    highEnabled && typeLocal === "Tous" && zoom >= IRIS_ZOOM_THRESHOLD
+  const iris = useIrisHigh(visibleDepts, irisEnabled)
 
   // Animation de cadrage : easeTo maplibre (linéaire, proche de l'ancienne
   // transition deck 600 ms) ; onMove alimente viewState pendant l'animation.
@@ -477,26 +494,64 @@ export default function DvfMap() {
     })
 
     if (representation === "choropleth") {
-      if (!highEnabled || high.features.length === 0) return [choropleth]
-      // Même échelle de couleurs que la maille mid nationale : une commune a
-      // la même couleur en mid et en high.
-      const highLayer = new GeoJsonLayer<ChoroplethFeature["properties"]>({
-        id: "choropleth-communes-high",
-        data: { type: "FeatureCollection" as const, features: high.features },
-        ...underLabels,
-        filled: true,
-        stroked: true,
-        getFillColor: (f) => colorScale.getColor(f as ChoroplethFeature),
-        getLineColor: [255, 255, 255, 150],
-        lineWidthMinPixels: 0.5,
-        pickable: true,
-        onHover: (info) =>
-          setHovered((info.object as ChoroplethFeature) ?? null),
-        onClick: (info) =>
-          onFeatureClick(info.object as ChoroplethFeature | undefined),
-        updateTriggers: { getFillColor: [colorScale] },
-      })
-      return [choropleth, highLayer]
+      const stack: Layer[] = [choropleth]
+      if (highEnabled && high.features.length > 0) {
+        // Même échelle de couleurs que la maille mid nationale : une commune a
+        // la même couleur en mid et en high.
+        stack.push(
+          new GeoJsonLayer<ChoroplethFeature["properties"]>({
+            id: "choropleth-communes-high",
+            data: {
+              type: "FeatureCollection" as const,
+              features: high.features,
+            },
+            ...underLabels,
+            filled: true,
+            stroked: true,
+            getFillColor: (f) => colorScale.getColor(f as ChoroplethFeature),
+            getLineColor: [255, 255, 255, 150],
+            lineWidthMinPixels: 0.5,
+            pickable: true,
+            onHover: (info) =>
+              setHovered((info.object as ChoroplethFeature) ?? null),
+            onClick: (info) =>
+              onFeatureClick(info.object as ChoroplethFeature | undefined),
+            updateTriggers: { getFillColor: [colorScale] },
+          })
+        )
+      }
+      if (irisEnabled && iris.features.length > 0) {
+        // Quartiers au-dessus des communes : deck picke la couche du dessus,
+        // l'IRIS capte donc hover/clic là où il existe ; ailleurs la commune
+        // reste visible et interactive. Mêmes seuils de quantiles.
+        stack.push(
+          new GeoJsonLayer<IrisFeature["properties"]>({
+            id: "choropleth-iris-high",
+            data: {
+              type: "FeatureCollection" as const,
+              features: iris.features,
+            },
+            ...underLabels,
+            filled: true,
+            stroked: true,
+            getFillColor: (f) => {
+              const p = (f as IrisFeature).properties
+              return colorScale.color(p.prix_m2_median, p.fiable)
+            },
+            getLineColor: [255, 255, 255, 150],
+            lineWidthMinPixels: 0.5,
+            pickable: true,
+            onHover: (info) =>
+              setHoveredIris((info.object as IrisFeature) ?? null),
+            onClick: (info) => {
+              const p = (info.object as IrisFeature | undefined)?.properties
+              if (p) navigate(`/commune/${p.code_commune}`)
+            },
+            updateTriggers: { getFillColor: [colorScale] },
+          })
+        )
+      }
+      return stack
     }
 
     const bubbles = new ScatterplotLayer({
@@ -549,6 +604,8 @@ export default function DvfMap() {
     contours,
     highEnabled,
     high.features,
+    irisEnabled,
+    iris.features,
     zoomDebounced,
     showPoints,
     pointColor,
@@ -579,11 +636,19 @@ export default function DvfMap() {
 
   // Remplace le getCursor de DeckGL : pointer au survol d'une entité pickable,
   // sinon retour au grab/grabbing CSS de maplibre (chaîne vide).
-  const hovering = heat ? showPoints && hoveredPoint != null : hovered != null
+  const hovering = heat
+    ? showPoints && hoveredPoint != null
+    : hovered != null || hoveredIris != null
   useEffect(() => {
     const canvas = mapRef.current?.getCanvas()
     if (canvas) canvas.style.cursor = hovering ? "pointer" : ""
   }, [hovering])
+
+  // La dépose de la couche IRIS (dézoom, changement de type) ne déclenche pas
+  // de leave deck.gl : purge manuelle du survol.
+  useEffect(() => {
+    if (!irisEnabled) setHoveredIris(null)
+  }, [irisEnabled])
 
   const hoveredStats = hovered
     ? statsForType(hovered.properties, typeLocal)
@@ -782,9 +847,22 @@ export default function DvfMap() {
               palette={colorScale.palette}
               format={(v) => formatInt(v)}
               footer={
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  Couleur atténuée : moins de 5 ventes.
-                </p>
+                <>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Couleur atténuée : moins de 5 ventes.
+                  </p>
+                  {irisEnabled && iris.features.length > 0 && (
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Maille quartier (IRIS) affichée dans les grandes villes —
+                      même échelle.
+                    </p>
+                  )}
+                  {hasIris && highEnabled && typeLocal !== "Tous" && (
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Maille quartier disponible pour « Tous » uniquement.
+                    </p>
+                  )}
+                </>
               }
             />
           </>
@@ -803,8 +881,18 @@ export default function DvfMap() {
         </div>
       )}
 
+      {/* Tooltip quartier (IRIS) — prioritaire : la couche du dessus picke. */}
+      {!heat && hoveredIris && (
+        <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur pointer-coarse:hidden">
+          <IrisTooltipContent
+            p={hoveredIris.properties}
+            clickHint="Cliquer pour ouvrir la fiche commune"
+          />
+        </div>
+      )}
+
       {/* Tooltip au survol */}
-      {!heat && hovered && hoveredStats && (
+      {!heat && !hoveredIris && hovered && hoveredStats && (
         <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur pointer-coarse:hidden">
           <div className="font-display font-semibold">
             {hovered.properties.nom}

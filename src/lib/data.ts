@@ -20,6 +20,10 @@ export const metaSchema = z.object({
   // Communes couvertes par l'analyse d'avis (0 ou absent = pas d'avis dans ce
   // run : les sections Avis se masquent d'elles-mêmes).
   nb_communes_avis: z.number().optional(),
+  // Maille quartier IRIS (0 ou absent = run sans quartiers : la couche carte
+  // reste masquée).
+  nb_iris: z.number().optional(),
+  nb_iris_scores: z.number().optional(),
   generated_at: z.string(),
 })
 export type Meta = z.infer<typeof metaSchema>
