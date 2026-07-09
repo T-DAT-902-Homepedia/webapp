@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react"
 
 import { SearchCommand, SearchTrigger } from "@/components/search-command"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { TricolorMark } from "@/components/tricolor-mark"
 import { Button } from "@/components/ui/button"
 import { useSearchShortcut } from "@/hooks/useSearchShortcut"
 import { NAV } from "@/lib/nav"
@@ -59,8 +60,14 @@ export function PageShell({
           >
             {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
           </Button>
-          <Link to="/" className="font-display text-lg font-bold tracking-tight">
-            Homepedia<span className="text-accent">.</span>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 font-display text-lg font-bold tracking-tight"
+          >
+            <TricolorMark />
+            <span>
+              Homepedia<span className="text-accent">.</span>
+            </span>
           </Link>
           <nav className="hidden items-center gap-1 text-sm md:flex">
             {NAV.map((item) => navLink(item))}

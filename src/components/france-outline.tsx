@@ -12,17 +12,19 @@ const FRANCE_PATH =
 // Positions viewBox des grandes villes, mêmes projection et normalisation que
 // FRANCE_PATH. Délais irréguliers pour éviter un clignotement synchrone.
 // pop = population communale (INSEE, ordre de grandeur 2021).
+// `red` : accent tricolore de marque sur 3 points répartis sans motif
+// géographique lisible (Paris, le plus gros, garde la couleur dominante).
 const CITY_DOTS = [
   { name: "Paris", x: 498, y: 226, delay: "0s", pop: 2_133_000 },
   { name: "Lyon", x: 671, y: 539, delay: "1.3s", pop: 522_000 },
   { name: "Marseille", x: 708, y: 789, delay: "0.5s", pop: 870_000 },
   { name: "Toulouse", x: 435, y: 757, delay: "1.9s", pop: 504_000 },
-  { name: "Bordeaux", x: 294, y: 633, delay: "0.9s", pop: 260_000 },
+  { name: "Bordeaux", x: 294, y: 633, delay: "0.9s", pop: 260_000, red: true },
   { name: "Nantes", x: 226, y: 392, delay: "2.3s", pop: 320_000 },
-  { name: "Lille", x: 547, y: 47, delay: "1.6s", pop: 236_000 },
+  { name: "Lille", x: 547, y: 47, delay: "1.6s", pop: 236_000, red: true },
   { name: "Strasbourg", x: 874, y: 255, delay: "0.7s", pop: 290_000 },
   { name: "Rennes", x: 217, y: 301, delay: "1.1s", pop: 225_000 },
-  { name: "Nice", x: 840, y: 747, delay: "2.6s", pop: 348_000 },
+  { name: "Nice", x: 840, y: 747, delay: "2.6s", pop: 348_000, red: true },
   { name: "Ajaccio", x: 943, y: 928, delay: "2.1s", pop: 73_000 },
 ]
 
@@ -53,7 +55,7 @@ export function FranceOutline(props: SVGProps<SVGSVGElement>) {
         vectorEffect="non-scaling-stroke"
       />
       {CITY_DOTS.map((city) => (
-        <g key={city.name}>
+        <g key={city.name} className={city.red ? "text-brand-red" : undefined}>
           <circle
             cx={city.x}
             cy={city.y}

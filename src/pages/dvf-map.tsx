@@ -11,6 +11,14 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { DeckOverlay } from "@/components/deck-overlay"
 import { MapTopBar } from "@/components/map-top-bar"
+import {
+  BASEMAP_KEYS,
+  BASEMAP_LABELS,
+  BASEMAP_STYLES,
+  isBasemap,
+  syncBasemapStyle,
+  type Basemap,
+} from "@/lib/basemaps"
 import { useChoropleth } from "@/hooks/useChoropleth"
 import {
   HIGH_ZOOM_THRESHOLD,
@@ -72,7 +80,7 @@ const POINTS_ZOOM = 11
 const HEAT_PRICE_DOMAIN: [number, number] = [1500, 6000]
 
 // --- État dans l'URL (partage/refresh, audit N4) ----------------------------
-// v=lat,lng,zoom ; repr= ; type= ; poids= ; iso=1
+// v=lat,lng,zoom ; repr= ; type= ; poids= ; iso=1 ; fond= (commun avec /map)
 
 function parseViewParam(v: string | null): MapViewState | null {
   if (!v) return null
@@ -119,6 +127,10 @@ export default function DvfMap() {
     params.get("poids") === "ventes" ? "ventes" : "prix",
   )
   const [contours, setContours] = useState(() => params.get("iso") === "1")
+  const [basemap, setBasemap] = useState<Basemap>(() => {
+    const f = params.get("fond")
+    return isBasemap(f) ? f : "clair"
+  })
 
   // Filtres du store initialisés depuis l'URL (une fois, au montage).
   useEffect(() => {
@@ -151,8 +163,9 @@ export default function DvfMap() {
       if (heatWeight !== "prix") next.set("poids", heatWeight)
       if (contours) next.set("iso", "1")
     }
+    if (basemap !== "clair") next.set("fond", basemap)
     setParams(next, { replace: true })
-  }, [debouncedView, representation, typeLocal, heatWeight, contours, setParams])
+  }, [debouncedView, representation, typeLocal, heatWeight, contours, basemap, setParams])
 
   // Dézoom manuel : le fil d'Ariane se tronque au niveau réellement visible.
   useEffect(() => {
@@ -452,12 +465,16 @@ export default function DvfMap() {
     fillBeforeId,
   ])
 
-  // Au (re)chargement du style, mémorise le 1er calque de symboles : c'est le
-  // beforeId sous lequel glisser les couches deck (labels au-dessus). Idempotent
-  // (même id -> pas de re-render), style Positron unique sur cette page.
-  const onStyleData = (map: MaplibreMap) => {
-    const symbol = (map.getStyle()?.layers ?? []).find((l) => l.type === "symbol")
-    setFillBeforeId(symbol?.id)
+  // À chaque (re)chargement de style — initial OU changement de fond — labels FR
+  // + mémorisation du 1er calque de symboles (beforeId), cf. lib/basemaps.
+  const onStyleData = (map: MaplibreMap) => setFillBeforeId(syncBasemapStyle(map))
+
+  // Changement de fond : détacher le beforeId dans le même commit — l'ancien id
+  // n'existe pas (encore) dans le style suivant, deck ré-ajouterait les couches
+  // sous un calque fantôme ; le styledata du nouveau style le re-fournit.
+  const changeBasemap = (b: Basemap) => {
+    setFillBeforeId(undefined)
+    setBasemap(b)
   }
 
   // Remplace le getCursor de DeckGL : pointer au survol d'une entité pickable,
@@ -476,7 +493,9 @@ export default function DvfMap() {
       <MapTopBar
         extra={
           <Button variant="ghost" size="sm" asChild className="max-md:hidden">
-            <Link to={`/map?v=${viewParam(debouncedView)}`}>
+            <Link
+              to={`/map?v=${viewParam(debouncedView)}${basemap !== "clair" ? `&fond=${basemap}` : ""}`}
+            >
               Voir en qualité de vie
             </Link>
           </Button>
@@ -485,7 +504,10 @@ export default function DvfMap() {
       <Map
         ref={mapRef}
         initialViewState={initialView}
-        mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        mapStyle={BASEMAP_STYLES[basemap]}
+        // Rechargement complet au changement de fond (les styles Carto partagent
+        // les mêmes ids ; le diff laisserait des libellés anglais résiduels).
+        styleDiffing={false}
         onMove={(e) => setViewState(e.viewState)}
         onStyleData={(e) => onStyleData(e.target)}
         style={{ width: "100%", height: "100%" }}
@@ -593,6 +615,25 @@ export default function DvfMap() {
             </label>
           </div>
         )}
+
+        {/* Fond de carte (fond= dans l'URL, commun avec /map). */}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2 text-xs">
+          <span className="text-muted-foreground">Fond</span>
+          {BASEMAP_KEYS.map((b) => (
+            <button
+              key={b}
+              type="button"
+              onClick={() => changeBasemap(b)}
+              className={
+                b === basemap
+                  ? "rounded border border-accent bg-accent/10 px-2 py-0.5 font-semibold text-accent"
+                  : "rounded border border-input px-2 py-0.5 text-muted-foreground hover:bg-muted"
+              }
+            >
+              {BASEMAP_LABELS[b]}
+            </button>
+          ))}
+        </div>
 
         {!heat && mesh !== "communes" && (
           <p className="mt-2 max-w-52 text-xs text-muted-foreground">

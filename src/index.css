@@ -32,6 +32,12 @@
     --destructive: oklch(0.62 0.235 25);
     --destructive-foreground: oklch(1 0 0);
 
+    /* Rouge tricolore : accent de MARQUE décoratif (logo, hero landing) —
+       jamais un état interactif ni une donnée (le rouge YlOrRd des cartes
+       signifie « cher », --destructive signifie erreur/baisse). Carmin
+       (teinte 20) pour rester distinct du rouge erreur (teinte 25). */
+    --brand-red: oklch(0.50 0.21 20);
+
     --border: oklch(0.91 0.008 80);
     --input: oklch(0.91 0.008 80);
     --ring: oklch(0.47 0.245 265);
@@ -76,6 +82,9 @@
 
     --destructive: oklch(0.67 0.22 25);
     --destructive-foreground: oklch(1 0 0);
+
+    /* Éclairci pour rester lisible (AA) sur le bleu nuit. */
+    --brand-red: oklch(0.63 0.20 18);
 
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
@@ -142,6 +151,7 @@
     --color-ink: oklch(0.10 0.015 265);
     --color-paper: oklch(0.966 0.008 80);
     --color-blue: oklch(0.47 0.245 265);
+    --color-brand-red: var(--brand-red);
     --color-blue-light: oklch(0.96 0.022 265);
     --color-green: oklch(0.74 0.16 165);
     --color-warm: oklch(0.73 0.165 55);
