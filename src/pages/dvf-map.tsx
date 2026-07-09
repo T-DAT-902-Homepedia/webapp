@@ -1,14 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import { ContourLayer, GeoJsonLayer, HeatmapLayer, ScatterplotLayer } from "deck.gl"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import {
+  ContourLayer,
+  GeoJsonLayer,
+  HeatmapLayer,
+  ScatterplotLayer,
+} from "deck.gl"
 import { WebMercatorViewport, type MapViewState } from "@deck.gl/core"
 import Map, { type MapRef } from "react-map-gl/maplibre"
 import type { Map as MaplibreMap } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { Checkbox } from "radix-ui"
-import { Check, ChevronRight } from "lucide-react"
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleDot,
+  Flame,
+  LandPlot,
+} from "lucide-react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  SegmentedControl,
+  type SegmentedItem,
+} from "@/components/ui/segmented-control"
 import { DeckOverlay } from "@/components/deck-overlay"
 import { MapTopBar } from "@/components/map-top-bar"
 import {
@@ -41,7 +56,11 @@ import {
   type TypeLocal,
 } from "@/lib/choropleth"
 import { featureBbox, featureCentroids, type Bbox } from "@/lib/centroids"
-import { makeColorScale, quantileScale, quantileThresholds } from "@/lib/colorScale"
+import {
+  makeColorScale,
+  quantileScale,
+  quantileThresholds,
+} from "@/lib/colorScale"
 import { PRICE_HEAT_SEQ, PRICE_SEQ } from "@/lib/palettes"
 import {
   BubbleLegend,
@@ -57,19 +76,61 @@ const INITIAL_VIEW_STATE: MapViewState = {
   zoom: 5,
 }
 
-const TYPES: TypeLocal[] = ["Tous", "Maison", "Appartement"]
-
-const REPRESENTATIONS: { id: Representation; label: string }[] = [
-  { id: "choropleth", label: "Choroplèthe" },
-  { id: "bubbles", label: "Bulles" },
-  { id: "heat", label: "Heatmap" },
+const TYPE_ITEMS: SegmentedItem<TypeLocal>[] = [
+  { value: "Tous", label: "Tous" },
+  { value: "Maison", label: "Maison" },
+  { value: "Appartement", label: "Appartement" },
 ]
+
+const REPRESENTATION_ITEMS: SegmentedItem<Representation>[] = [
+  {
+    value: "choropleth",
+    label: "Choroplèthe",
+    icon: <LandPlot />,
+    title: "Zones colorées selon le prix médian au m²",
+  },
+  {
+    value: "bubbles",
+    label: "Bulles",
+    icon: <CircleDot />,
+    title: "Cercles proportionnels au volume de ventes",
+  },
+  {
+    value: "heat",
+    label: "Heatmap",
+    icon: <Flame />,
+    title: "Nappe de chaleur des mutations (prix ou densité)",
+  },
+]
+
+const WEIGHT_ITEMS: SegmentedItem<"ventes" | "prix">[] = [
+  { value: "ventes", label: "Ventes", title: "Densité du nombre de ventes" },
+  { value: "prix", label: "Prix", title: "Niveau de prix moyen (€/m²)" },
+]
+
+const BASEMAP_ITEMS: SegmentedItem<Basemap>[] = BASEMAP_KEYS.map((b) => ({
+  value: b,
+  label: BASEMAP_LABELS[b],
+}))
+
+/** Label de section du panneau de contrôle (même style que la sidebar score). */
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+      {children}
+    </div>
+  )
+}
 
 // Hoistée hors du composant : identité stable pour deck.gl pendant le chargement
 // (un littéral inline recréerait la couche à chaque render).
 const EMPTY_COLLECTION = { type: "FeatureCollection" as const, features: [] }
 
-const MESH_LABEL = { regions: "régions", departements: "départements", communes: "communes" }
+const MESH_LABEL = {
+  regions: "régions",
+  departements: "départements",
+  communes: "communes",
+}
 
 // Au-delà de ce zoom, la heatmap laisse place aux mutations individuelles.
 const POINTS_ZOOM = 11
@@ -103,7 +164,7 @@ export default function DvfMap() {
   // Vue initiale depuis l'URL, figée au montage (la carte est non contrôlée) ;
   // viewState devient ensuite un miroir passif alimenté par onMove.
   const [initialView] = useState<MapViewState>(
-    () => parseViewParam(params.get("v")) ?? INITIAL_VIEW_STATE,
+    () => parseViewParam(params.get("v")) ?? INITIAL_VIEW_STATE
   )
   const [viewState, setViewState] = useState<MapViewState>(initialView)
   const mapRef = useRef<MapRef>(null)
@@ -111,9 +172,10 @@ export default function DvfMap() {
   // (beforeId), les labels du fond restent lisibles.
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
   const [hovered, setHovered] = useState<ChoroplethFeature | null>(null)
-  const [hoveredPoint, setHoveredPoint] = useState<{ prix: number; t: string } | null>(
-    null,
-  )
+  const [hoveredPoint, setHoveredPoint] = useState<{
+    prix: number
+    t: string
+  } | null>(null)
   const [drillPath, setDrillPath] = useState<DrillStep[]>([])
   const navigate = useNavigate()
 
@@ -124,13 +186,15 @@ export default function DvfMap() {
   // Pondération de la heatmap : niveau de prix (défaut — la page est une carte
   // des prix) ou densité de ventes. Les anciens liens ?poids=prix restent valides.
   const [heatWeight, setHeatWeight] = useState<"ventes" | "prix">(() =>
-    params.get("poids") === "ventes" ? "ventes" : "prix",
+    params.get("poids") === "ventes" ? "ventes" : "prix"
   )
   const [contours, setContours] = useState(() => params.get("iso") === "1")
   const [basemap, setBasemap] = useState<Basemap>(() => {
     const f = params.get("fond")
     return isBasemap(f) ? f : "clair"
   })
+  // Repli du panneau de contrôle : éphémère (pas dans l'URL), utile sur mobile.
+  const [panelOpen, setPanelOpen] = useState(true)
 
   // Filtres du store initialisés depuis l'URL (une fois, au montage).
   useEffect(() => {
@@ -165,7 +229,15 @@ export default function DvfMap() {
     }
     if (basemap !== "clair") next.set("fond", basemap)
     setParams(next, { replace: true })
-  }, [debouncedView, representation, typeLocal, heatWeight, contours, basemap, setParams])
+  }, [
+    debouncedView,
+    representation,
+    typeLocal,
+    heatWeight,
+    contours,
+    basemap,
+    setParams,
+  ])
 
   // Dézoom manuel : le fil d'Ariane se tronque au niveau réellement visible.
   useEffect(() => {
@@ -182,7 +254,9 @@ export default function DvfMap() {
   // maille mid restant affichée dessous (fallback sans flash). Bounds
   // débouncés : on ne déclenche pas un fetch à chaque frame de pan.
   const highEnabled =
-    representation === "choropleth" && mesh === "communes" && zoom >= HIGH_ZOOM_THRESHOLD
+    representation === "choropleth" &&
+    mesh === "communes" &&
+    zoom >= HIGH_ZOOM_THRESHOLD
   const bounds = useMemo<Bbox | null>(() => {
     if (!highEnabled) return null
     // deck.gl v8 : getBounds() renvoie un tableau plat [minX, minY, maxX, maxY].
@@ -228,7 +302,7 @@ export default function DvfMap() {
         [bbox[0], bbox[1]],
         [bbox[2], bbox[3]],
       ],
-      { padding: 48 },
+      { padding: 48 }
     )
     const nextView: MapViewState = {
       longitude: target.longitude,
@@ -239,7 +313,7 @@ export default function DvfMap() {
     easeToView(nextView)
     const step: DrillStep = { label: f.properties.nom, view: nextView }
     setDrillPath((path) =>
-      f.properties.code_region != null ? [step] : [...path.slice(0, 1), step],
+      f.properties.code_region != null ? [step] : [...path.slice(0, 1), step]
     )
   }
 
@@ -253,30 +327,35 @@ export default function DvfMap() {
   // refetcher (le GeoJSON contient les trois familles de colonnes).
   const getValue = useMemo(
     () => (p: ChoroplethProperties) => statsForType(p, typeLocal).prix,
-    [typeLocal],
+    [typeLocal]
   )
   const getFiable = useMemo(
     () => (p: ChoroplethProperties) => statsForType(p, typeLocal).fiable,
-    [typeLocal],
+    [typeLocal]
   )
 
   const colorScale = useMemo(
     () => makeColorScale(data?.features ?? [], getValue, getFiable),
-    [data, getValue, getFiable],
+    [data, getValue, getFiable]
   )
 
   // Centres des features pour les bulles (mémoïsé par jeu de données).
   const centroids = useMemo(
-    () => (representation === "bubbles" ? featureCentroids(data?.features ?? []) : []),
-    [representation, data],
+    () =>
+      representation === "bubbles"
+        ? featureCentroids(data?.features ?? [])
+        : [],
+    [representation, data]
   )
   const maxNb = useMemo(
     () =>
       Math.max(
         1,
-        ...centroids.map((c) => statsForType(c.feature.properties, typeLocal).nb),
+        ...centroids.map(
+          (c) => statsForType(c.feature.properties, typeLocal).nb
+        )
       ),
-    [centroids, typeLocal],
+    [centroids, typeLocal]
   )
 
   // Points de mutations filtrés par type (heatmap).
@@ -320,7 +399,7 @@ export default function DvfMap() {
             pickable: true,
             onHover: (info) =>
               setHoveredPoint(
-                (info.object as { prix: number; t: string } | undefined) ?? null,
+                (info.object as { prix: number; t: string } | undefined) ?? null
               ),
             updateTriggers: { getFillColor: [pointColor] },
           }),
@@ -381,7 +460,8 @@ export default function DvfMap() {
       lineWidthMinPixels: 0.5,
       pickable: true,
       onHover: (info) => setHovered((info.object as ChoroplethFeature) ?? null),
-      onClick: (info) => onFeatureClick(info.object as ChoroplethFeature | undefined),
+      onClick: (info) =>
+        onFeatureClick(info.object as ChoroplethFeature | undefined),
       // colorScale change d'identité quand (data, typeLocal) changent : c'est
       // lui qui déclenche le recalcul des couleurs.
       updateTriggers: { getFillColor: [colorScale] },
@@ -401,7 +481,8 @@ export default function DvfMap() {
         getLineColor: [255, 255, 255, 150],
         lineWidthMinPixels: 0.5,
         pickable: true,
-        onHover: (info) => setHovered((info.object as ChoroplethFeature) ?? null),
+        onHover: (info) =>
+          setHovered((info.object as ChoroplethFeature) ?? null),
         onClick: (info) =>
           onFeatureClick(info.object as ChoroplethFeature | undefined),
         updateTriggers: { getFillColor: [colorScale] },
@@ -431,11 +512,11 @@ export default function DvfMap() {
       onHover: (info) =>
         setHovered(
           ((info.object as (typeof centroids)[number] | undefined)?.feature ??
-            null) as ChoroplethFeature | null,
+            null) as ChoroplethFeature | null
         ),
       onClick: (info) =>
         onFeatureClick(
-          (info.object as (typeof centroids)[number] | undefined)?.feature,
+          (info.object as (typeof centroids)[number] | undefined)?.feature
         ),
       updateTriggers: {
         getFillColor: [colorScale],
@@ -467,7 +548,8 @@ export default function DvfMap() {
 
   // À chaque (re)chargement de style — initial OU changement de fond — labels FR
   // + mémorisation du 1er calque de symboles (beforeId), cf. lib/basemaps.
-  const onStyleData = (map: MaplibreMap) => setFillBeforeId(syncBasemapStyle(map))
+  const onStyleData = (map: MaplibreMap) =>
+    setFillBeforeId(syncBasemapStyle(map))
 
   // Changement de fond : détacher le beforeId dans le même commit — l'ancien id
   // n'existe pas (encore) dans le style suivant, deck ré-ajouterait les couches
@@ -485,7 +567,9 @@ export default function DvfMap() {
     if (canvas) canvas.style.cursor = hovering ? "pointer" : ""
   }, [hovering])
 
-  const hoveredStats = hovered ? statsForType(hovered.properties, typeLocal) : null
+  const hoveredStats = hovered
+    ? statsForType(hovered.properties, typeLocal)
+    : null
   const loading = isLoading || (heat && pointsLoading)
 
   return (
@@ -516,139 +600,141 @@ export default function DvfMap() {
       </Map>
 
       {/* Panneau de contrôle */}
-      <div className="absolute top-16 left-4 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
-        <div className="text-sm font-semibold">
-          Prix au m² — {heat ? (showPoints ? "mutations (points)" : "mutations") : MESH_LABEL[mesh]}
+      <div className="absolute top-16 left-4 w-80 max-w-[calc(100vw-2rem)] rounded-xl border bg-background/95 shadow-lg backdrop-blur">
+        {/* En-tête toujours visible : titre + repli (gain de place sur mobile). */}
+        <div
+          className={cn(
+            "flex items-center justify-between gap-2 p-4",
+            panelOpen && "pb-0"
+          )}
+        >
+          <div className="text-sm font-semibold">
+            Prix au m² —{" "}
+            {heat
+              ? showPoints
+                ? "mutations (points)"
+                : "mutations"
+              : MESH_LABEL[mesh]}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-expanded={panelOpen}
+            aria-label={panelOpen ? "Replier le panneau" : "Déplier le panneau"}
+            onClick={() => setPanelOpen((o) => !o)}
+          >
+            <ChevronDown
+              className={cn("transition-transform", !panelOpen && "-rotate-90")}
+            />
+          </Button>
         </div>
 
-        {/* Fil d'Ariane du drill-down : on sait où on est, on peut remonter. */}
-        {!heat && (
-          <nav aria-label="Niveau de zoom" className="mt-1.5 flex flex-wrap items-center gap-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => goToStep(-1)}
-              className={cn(
-                "rounded px-1 py-0.5 transition-colors hover:bg-muted",
-                drillPath.length === 0
-                  ? "font-semibold text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              France
-            </button>
-            {drillPath.map((step, i) => (
-              <span key={step.label} className="flex items-center gap-0.5">
-                <ChevronRight className="size-3 text-muted-foreground" />
+        {panelOpen && (
+          <div className="max-h-[calc(100svh-10rem)] space-y-3 overflow-y-auto p-4 pt-1.5">
+            {/* Fil d'Ariane du drill-down : on sait où on est, on peut remonter. */}
+            {!heat && (
+              <nav
+                aria-label="Niveau de zoom"
+                className="flex flex-wrap items-center gap-0.5 text-xs"
+              >
                 <button
                   type="button"
-                  onClick={() => goToStep(i)}
+                  onClick={() => goToStep(-1)}
                   className={cn(
                     "rounded px-1 py-0.5 transition-colors hover:bg-muted",
-                    i === drillPath.length - 1
+                    drillPath.length === 0
                       ? "font-semibold text-foreground"
-                      : "text-muted-foreground",
+                      : "text-muted-foreground"
                   )}
                 >
-                  {step.label}
+                  France
                 </button>
-              </span>
-            ))}
-          </nav>
-        )}
+                {drillPath.map((step, i) => (
+                  <span key={step.label} className="flex items-center gap-0.5">
+                    <ChevronRight className="size-3 text-muted-foreground" />
+                    <button
+                      type="button"
+                      onClick={() => goToStep(i)}
+                      className={cn(
+                        "rounded px-1 py-0.5 transition-colors hover:bg-muted",
+                        i === drillPath.length - 1
+                          ? "font-semibold text-foreground"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {step.label}
+                    </button>
+                  </span>
+                ))}
+              </nav>
+            )}
 
-        <div className="mt-2 flex gap-1.5">
-          {REPRESENTATIONS.map((r) => (
-            <Button
-              key={r.id}
-              size="sm"
-              variant={r.id === representation ? "accent" : "outline"}
-              onClick={() => setRepresentation(r.id)}
-            >
-              {r.label}
-            </Button>
-          ))}
-        </div>
-
-        <div className="mt-2 flex gap-1.5">
-          {TYPES.map((t) => (
-            <Button
-              key={t}
-              size="sm"
-              variant={t === typeLocal ? "accent" : "outline"}
-              onClick={() => setTypeLocal(t)}
-            >
-              {t}
-            </Button>
-          ))}
-        </div>
-
-        {heat && (
-          <div className="mt-2 space-y-1.5 border-t pt-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Pondération</span>
-              {(["ventes", "prix"] as const).map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  onClick={() => setHeatWeight(w)}
-                  className={
-                    w === heatWeight
-                      ? "rounded border border-accent bg-accent/10 px-2 py-0.5 font-semibold text-accent"
-                      : "rounded border border-input px-2 py-0.5 text-muted-foreground hover:bg-muted"
-                  }
-                >
-                  {w === "ventes" ? "Ventes" : "Prix"}
-                </button>
-              ))}
+            <div className="space-y-1.5">
+              <SectionLabel>Affichage</SectionLabel>
+              <SegmentedControl
+                aria-label="Mode d'affichage"
+                items={REPRESENTATION_ITEMS}
+                value={representation}
+                onValueChange={setRepresentation}
+              />
             </div>
-            <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
-              <Checkbox.Root
-                checked={contours}
-                onCheckedChange={(v) => setContours(v === true)}
-                className="flex size-4 shrink-0 items-center justify-center rounded border border-input bg-background data-[state=checked]:border-accent data-[state=checked]:bg-accent"
-              >
-                <Checkbox.Indicator>
-                  <Check className="size-3 text-accent-foreground" />
-                </Checkbox.Indicator>
-              </Checkbox.Root>
-              Isolignes de densité
-            </label>
+
+            <div className="space-y-1.5">
+              <SectionLabel>Type de bien</SectionLabel>
+              <SegmentedControl
+                aria-label="Type de bien"
+                items={TYPE_ITEMS}
+                value={typeLocal}
+                onValueChange={setTypeLocal}
+              />
+            </div>
+
+            {heat && (
+              <div className="space-y-1.5">
+                <SectionLabel>Pondération</SectionLabel>
+                <SegmentedControl
+                  aria-label="Pondération de la heatmap"
+                  items={WEIGHT_ITEMS}
+                  value={heatWeight}
+                  onValueChange={setHeatWeight}
+                />
+                <label className="flex cursor-pointer items-center gap-2 pt-0.5 text-xs text-muted-foreground">
+                  <Checkbox
+                    checked={contours}
+                    onCheckedChange={(v) => setContours(v === true)}
+                  />
+                  Isolignes de densité
+                </label>
+              </div>
+            )}
+
+            {/* Fond de carte (fond= dans l'URL, commun avec /map). */}
+            <div className="space-y-1.5">
+              <SectionLabel>Fond de carte</SectionLabel>
+              <SegmentedControl
+                aria-label="Fond de carte"
+                items={BASEMAP_ITEMS}
+                value={basemap}
+                onValueChange={changeBasemap}
+              />
+            </div>
+
+            {!heat && mesh !== "communes" && (
+              <p className="text-xs text-muted-foreground">
+                Cliquez sur une {mesh === "regions" ? "région" : "département"}{" "}
+                pour zoomer, sur une commune pour ouvrir sa fiche.
+              </p>
+            )}
+
+            {metaError && (
+              <div className="text-xs text-destructive">
+                Données indisponibles — réessayez plus tard.
+              </div>
+            )}
+            {loading && !metaError && (
+              <div className="text-xs text-muted-foreground">Chargement…</div>
+            )}
           </div>
-        )}
-
-        {/* Fond de carte (fond= dans l'URL, commun avec /map). */}
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2 text-xs">
-          <span className="text-muted-foreground">Fond</span>
-          {BASEMAP_KEYS.map((b) => (
-            <button
-              key={b}
-              type="button"
-              onClick={() => changeBasemap(b)}
-              className={
-                b === basemap
-                  ? "rounded border border-accent bg-accent/10 px-2 py-0.5 font-semibold text-accent"
-                  : "rounded border border-input px-2 py-0.5 text-muted-foreground hover:bg-muted"
-              }
-            >
-              {BASEMAP_LABELS[b]}
-            </button>
-          ))}
-        </div>
-
-        {!heat && mesh !== "communes" && (
-          <p className="mt-2 max-w-52 text-xs text-muted-foreground">
-            Cliquez sur une {mesh === "regions" ? "région" : "département"} pour
-            zoomer, sur une commune pour ouvrir sa fiche.
-          </p>
-        )}
-
-        {metaError && (
-          <div className="mt-2 max-w-52 text-xs text-destructive">
-            Données indisponibles — réessayez plus tard.
-          </div>
-        )}
-        {loading && !metaError && (
-          <div className="mt-2 text-xs text-muted-foreground">Chargement…</div>
         )}
       </div>
 
@@ -706,7 +792,8 @@ export default function DvfMap() {
             {hovered.properties.nom}
           </div>
           <div className="mt-1">
-            Médiane{typeLocal !== "Tous" ? ` (${typeLocal.toLowerCase()})` : ""} :{" "}
+            Médiane{typeLocal !== "Tous" ? ` (${typeLocal.toLowerCase()})` : ""}{" "}
+            :{" "}
             <span className="font-semibold text-accent">
               {formatEuroM2(hoveredStats.prix)}
             </span>
@@ -717,7 +804,8 @@ export default function DvfMap() {
           </div>
           {hovered.properties.score_median != null && (
             <div className="text-muted-foreground">
-              Score médian : {Math.round(hovered.properties.score_median * 100)} / 100
+              Score médian : {Math.round(hovered.properties.score_median * 100)}{" "}
+              / 100
               {hovered.properties.gap_pondere_median != null &&
                 ` · écart ${formatSigned(hovered.properties.gap_pondere_median)}`}
             </div>
