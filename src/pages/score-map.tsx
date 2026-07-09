@@ -27,10 +27,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { DeckOverlay } from "@/components/deck-overlay"
 import { MapTopBar } from "@/components/map-top-bar"
+import { useTheme } from "@/components/theme-provider"
 import {
   BASEMAP_STYLES,
   isBasemap,
   syncBasemapStyle,
+  themeBasemap,
   type Basemap,
 } from "@/lib/basemaps"
 import { ScoreSidebar, type MapView } from "@/components/score-sidebar"
@@ -120,9 +122,15 @@ export default function ScoreMap() {
     return isMetric(y) ? y : "n_prix"
   })
   const [opacity, setOpacity] = useState(0.8)
+  // Fond de carte : `fond=` dans l'URL vaut choix explicite (il y reste) ;
+  // sinon le fond suit le thème de l'app (clair/sombre), bascules comprises.
+  const { resolvedTheme } = useTheme()
+  const [basemapExplicit, setBasemapExplicit] = useState(() =>
+    isBasemap(searchParams.get("fond"))
+  )
   const [basemap, setBasemap] = useState<Basemap>(() => {
     const f = searchParams.get("fond")
-    return isBasemap(f) ? f : "clair"
+    return isBasemap(f) ? f : themeBasemap(resolvedTheme)
   })
   const [fillBeforeId, setFillBeforeId] = useState<string | undefined>()
   const [wordCloudEnabled, setWordCloudEnabled] = useState(false)
@@ -195,12 +203,12 @@ export default function ScoreMap() {
       {
         m: metric === "score_valeur" ? null : metric,
         y: bivariate ? metricY : null,
-        fond: basemap === "clair" ? null : basemap,
+        fond: basemapExplicit ? basemap : null,
       },
       true,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metric, metricY, bivariate, basemap])
+  }, [metric, metricY, bivariate, basemap, basemapExplicit])
 
   // Échap ferme le panneau.
   useEffect(() => {
@@ -344,8 +352,17 @@ export default function ScoreMap() {
   // sous un calque fantôme ; le styledata du nouveau style le re-fournit.
   const changeBasemap = (b: Basemap) => {
     setFillBeforeId(undefined)
+    setBasemapExplicit(true)
     setBasemap(b)
   }
+
+  // Tant qu'aucun fond n'est choisi explicitement, suivre les bascules de
+  // thème (même détachement du beforeId qu'un changement manuel).
+  useEffect(() => {
+    if (basemapExplicit) return
+    setFillBeforeId(undefined)
+    setBasemap(themeBasemap(resolvedTheme))
+  }, [resolvedTheme, basemapExplicit])
 
   return (
     <div className="flex h-svh w-svw overflow-hidden bg-background text-foreground">
@@ -378,7 +395,7 @@ export default function ScoreMap() {
           extra={
             <Button variant="ghost" size="sm" asChild className="max-md:hidden">
               <Link
-                to={`/carte?v=${currentViewParam()}${basemap !== "clair" ? `&fond=${basemap}` : ""}`}
+                to={`/carte?v=${currentViewParam()}${basemapExplicit ? `&fond=${basemap}` : ""}`}
               >
                 Voir en prix
               </Link>

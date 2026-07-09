@@ -22,6 +22,12 @@ export const BASEMAP_KEYS = Object.keys(BASEMAP_LABELS) as Basemap[]
 export const isBasemap = (v: string | null): v is Basemap =>
   v != null && v in BASEMAP_LABELS
 
+/** Fond par défaut : suit le thème résolu de l'app (dark → Sombre,
+ *  light → Clair). Ne s'applique que tant que l'utilisateur n'a pas choisi
+ *  explicitement un fond (`fond=` absent de l'URL). */
+export const themeBasemap = (resolved: "dark" | "light"): Basemap =>
+  resolved === "dark" ? "sombre" : "clair"
+
 // Imagerie aérienne Esri (raster, sans clé) pour le fond « Satellite ».
 const SATELLITE_STYLE: StyleSpecification = {
   version: 8,

@@ -26,12 +26,14 @@ import {
 } from "@/components/ui/segmented-control"
 import { DeckOverlay } from "@/components/deck-overlay"
 import { MapTopBar } from "@/components/map-top-bar"
+import { useTheme } from "@/components/theme-provider"
 import {
   BASEMAP_KEYS,
   BASEMAP_LABELS,
   BASEMAP_STYLES,
   isBasemap,
   syncBasemapStyle,
+  themeBasemap,
   type Basemap,
 } from "@/lib/basemaps"
 import { useChoropleth } from "@/hooks/useChoropleth"
@@ -189,9 +191,15 @@ export default function DvfMap() {
     params.get("poids") === "ventes" ? "ventes" : "prix"
   )
   const [contours, setContours] = useState(() => params.get("iso") === "1")
+  // Fond de carte : `fond=` dans l'URL vaut choix explicite (il y reste) ;
+  // sinon le fond suit le thème de l'app (clair/sombre), bascules comprises.
+  const { resolvedTheme } = useTheme()
+  const [basemapExplicit, setBasemapExplicit] = useState(() =>
+    isBasemap(params.get("fond"))
+  )
   const [basemap, setBasemap] = useState<Basemap>(() => {
     const f = params.get("fond")
-    return isBasemap(f) ? f : "clair"
+    return isBasemap(f) ? f : themeBasemap(resolvedTheme)
   })
   // Repli du panneau de contrôle : éphémère (pas dans l'URL), utile sur mobile.
   const [panelOpen, setPanelOpen] = useState(true)
@@ -227,7 +235,7 @@ export default function DvfMap() {
       if (heatWeight !== "prix") next.set("poids", heatWeight)
       if (contours) next.set("iso", "1")
     }
-    if (basemap !== "clair") next.set("fond", basemap)
+    if (basemapExplicit) next.set("fond", basemap)
     setParams(next, { replace: true })
   }, [
     debouncedView,
@@ -236,6 +244,7 @@ export default function DvfMap() {
     heatWeight,
     contours,
     basemap,
+    basemapExplicit,
     setParams,
   ])
 
@@ -556,8 +565,17 @@ export default function DvfMap() {
   // sous un calque fantôme ; le styledata du nouveau style le re-fournit.
   const changeBasemap = (b: Basemap) => {
     setFillBeforeId(undefined)
+    setBasemapExplicit(true)
     setBasemap(b)
   }
+
+  // Tant qu'aucun fond n'est choisi explicitement, suivre les bascules de
+  // thème (même détachement du beforeId qu'un changement manuel).
+  useEffect(() => {
+    if (basemapExplicit) return
+    setFillBeforeId(undefined)
+    setBasemap(themeBasemap(resolvedTheme))
+  }, [resolvedTheme, basemapExplicit])
 
   // Remplace le getCursor de DeckGL : pointer au survol d'une entité pickable,
   // sinon retour au grab/grabbing CSS de maplibre (chaîne vide).
@@ -578,7 +596,7 @@ export default function DvfMap() {
         extra={
           <Button variant="ghost" size="sm" asChild className="max-md:hidden">
             <Link
-              to={`/map?v=${viewParam(debouncedView)}${basemap !== "clair" ? `&fond=${basemap}` : ""}`}
+              to={`/map?v=${viewParam(debouncedView)}${basemapExplicit ? `&fond=${basemap}` : ""}`}
             >
               Voir en qualité de vie
             </Link>
