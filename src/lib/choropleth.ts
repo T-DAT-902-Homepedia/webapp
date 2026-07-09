@@ -74,16 +74,22 @@ type Geometry = { type: string; coordinates?: unknown; geometries?: Geometry[] }
 
 /**
  * La simplification du pipeline produit parfois des GeometryCollection (polygone
- * réel + LineString parasites), que deck.gl GeoJsonLayer ne sait pas rendre. On
- * n'en garde que les membres polygonaux, fusionnés en MultiPolygon si besoin.
+ * réel + LineString parasites), que deck.gl GeoJsonLayer ne sait pas rendre —
+ * parfois même IMBRIQUÉES (Nouvelle-Aquitaine, run 2026-07-07 : GC(GC(MultiPolygon),
+ * MultiLineString)). On collecte récursivement les membres polygonaux, fusionnés
+ * en MultiPolygon si besoin.
  */
 export function normalizeGeometry(geom: Geometry | null): Geometry | null {
   if (!geom || geom.type !== "GeometryCollection") return geom
   const polygons: unknown[] = []
-  for (const g of geom.geometries ?? []) {
-    if (g.type === "Polygon") polygons.push(g.coordinates)
-    else if (g.type === "MultiPolygon") polygons.push(...(g.coordinates as unknown[]))
+  const collect = (geometries: Geometry[]) => {
+    for (const g of geometries) {
+      if (g.type === "Polygon") polygons.push(g.coordinates)
+      else if (g.type === "MultiPolygon") polygons.push(...(g.coordinates as unknown[]))
+      else if (g.type === "GeometryCollection") collect(g.geometries ?? [])
+    }
   }
+  collect(geom.geometries ?? [])
   if (polygons.length === 0) return null
   return { type: "MultiPolygon", coordinates: polygons }
 }

@@ -54,6 +54,23 @@ describe("normalizeGeometry", () => {
     })
   })
 
+  it("extrait les polygones d'une GeometryCollection imbriquée (Nouvelle-Aquitaine, run 2026-07-07)", () => {
+    const nested = {
+      type: "GeometryCollection",
+      geometries: [
+        {
+          type: "GeometryCollection",
+          geometries: [{ type: "MultiPolygon", coordinates: [[[[0, 0]]]] }],
+        },
+        { type: "MultiLineString", coordinates: [[[1, 1]]] },
+      ],
+    }
+    expect(normalizeGeometry(nested)).toEqual({
+      type: "MultiPolygon",
+      coordinates: [[[[0, 0]]]],
+    })
+  })
+
   it("retourne null si la collection ne contient aucun polygone", () => {
     expect(
       normalizeGeometry({

@@ -31,7 +31,20 @@ export async function fetchJson<T>(url: string, schema: z.ZodType<T>): Promise<T
   return schema.parse(await res.json())
 }
 
-export const fetchMeta = () => fetchJson(`${DATA_URL}/meta.json`, metaSchema)
+// Version du run courant (generated_at), mémorisée au fetch de meta.json.
+// Le bucket sert les artefacts en `max-age=31536000, immutable`, mais le
+// pipeline peut re-publier un run au même chemin (correctif de données) : le
+// `?v=` dérivé de meta casse alors le cache navigateur en ≤ 5 min (TTL de
+// meta.json) — sans lui, une géométrie corrigée mettrait un an à se propager
+// (Nouvelle-Aquitaine invisible, run 2026-07-07 re-publié le 09).
+let runVersion = ""
 
-/** URL d'un artefact immuable du run courant. */
-export const artifactUrl = (base: string, path: string) => `${DATA_URL}/${base}/${path}`
+export const fetchMeta = async () => {
+  const meta = await fetchJson(`${DATA_URL}/meta.json`, metaSchema)
+  runVersion = meta.generated_at
+  return meta
+}
+
+/** URL d'un artefact du run courant, versionnée par meta.generated_at. */
+export const artifactUrl = (base: string, path: string) =>
+  `${DATA_URL}/${base}/${path}${runVersion ? `?v=${encodeURIComponent(runVersion)}` : ""}`
