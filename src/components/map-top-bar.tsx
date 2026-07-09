@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { SearchCommand, SearchTrigger } from "@/components/search-command"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { TricolorMark } from "@/components/tricolor-mark"
 import { useSearchShortcut } from "@/hooks/useSearchShortcut"
 import { NAV } from "@/lib/nav"
 import type { SearchEntry } from "@/lib/search"
@@ -33,9 +34,12 @@ export function MapTopBar({
         <div className="flex items-center gap-2 px-3 py-2 sm:gap-4 sm:px-4">
           <Link
             to="/"
-            className="font-display text-base font-bold tracking-tight sm:text-lg"
+            className="inline-flex items-center gap-1.5 font-display text-base font-bold tracking-tight sm:text-lg"
           >
-            Homepedia<span className="text-accent">.</span>
+            <TricolorMark />
+            <span>
+              Homepedia<span className="text-accent">.</span>
+            </span>
           </Link>
           <nav className="flex items-center gap-0.5 overflow-x-auto text-sm">
             {NAV.map((item) => (

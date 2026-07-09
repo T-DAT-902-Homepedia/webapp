@@ -10,6 +10,7 @@ import {
 import { Link } from "react-router-dom"
 
 import { FranceOutline } from "@/components/france-outline"
+import { TricolorMark } from "@/components/tricolor-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useMeta } from "@/hooks/useMeta"
@@ -86,8 +87,11 @@ export function Landing() {
       {/* Header */}
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <span className="font-display text-xl font-bold tracking-tight">
-            Homepedia<span className="text-accent">.</span>
+          <span className="inline-flex items-center gap-2 font-display text-xl font-bold tracking-tight">
+            <TricolorMark />
+            <span>
+              Homepedia<span className="text-accent">.</span>
+            </span>
           </span>
           <nav className="flex items-center gap-1 sm:gap-2">
             {NAV.map((item) => (
@@ -124,12 +128,14 @@ export function Landing() {
         <div className="relative mx-auto max-w-6xl px-6 py-24 md:py-32">
           <Badge
             variant="outline"
-            className="mb-6 border-accent/30 bg-accent/5 text-accent"
+            className="mb-6 gap-1.5 border-accent/30 bg-accent/5 text-accent"
           >
+            <TricolorMark />
             Données ouvertes
           </Badge>
           <h1 className="max-w-3xl font-display text-5xl leading-[1.05] font-bold tracking-tight text-balance md:text-7xl">
-            Le marché immobilier français,{" "}
+            Le marché immobilier{" "}
+            <span className="text-brand-red">français</span>,{" "}
             <span className="text-accent">cartographié</span>.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
@@ -196,7 +202,8 @@ export function Landing() {
       {/* Footer */}
       <footer>
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-4 px-6 py-10 md:flex-row md:items-center">
-          <p className="text-sm text-muted-foreground">
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <TricolorMark />
             Homepedia — projet de data-visualisation immobilière.
           </p>
           <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
