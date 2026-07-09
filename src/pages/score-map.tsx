@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { GeoJsonLayer, ScatterplotLayer } from "deck.gl"
+import { GeoJsonLayer, ScatterplotLayer, type Layer } from "deck.gl"
 import type { MapViewState, PickingInfo } from "@deck.gl/core"
 import Map, { type MapRef } from "react-map-gl/maplibre"
 import type { Map as MaplibreMap } from "maplibre-gl"
@@ -17,6 +17,15 @@ import {
 } from "@/lib/score"
 import { adaptScoreProperties, useScoreMesh } from "@/hooks/useScoreMesh"
 import { useChoropleth } from "@/hooks/useChoropleth"
+import { useVisibleDepartements } from "@/hooks/useCommunesHigh"
+import {
+  IRIS_ZOOM_THRESHOLD,
+  useHasIris,
+  useIrisHigh,
+} from "@/hooks/useIrisHigh"
+import { hasIrisMetric, irisMetricValue, type IrisFeature } from "@/lib/iris"
+import { IrisTooltipContent } from "@/components/iris-tooltip"
+import type { Bbox } from "@/lib/centroids"
 import {
   BIVAR_CLASS_LABELS,
   makeBivariateScale,
@@ -111,6 +120,7 @@ export default function ScoreMap() {
     () => parseViewParam(new URLSearchParams(window.location.search).get("v")) ?? INITIAL_VIEW_STATE,
   )
   const [hovered, setHovered] = useState<ScoreFeature | null>(null)
+  const [hoveredIris, setHoveredIris] = useState<IrisFeature | null>(null)
   const [metric, setMetric] = useState<Metric>(() => {
     const m = searchParams.get("m")
     return isMetric(m) ? m : "score_valeur"
@@ -154,6 +164,35 @@ export default function ScoreMap() {
   // Maille adaptative : régions -> départements -> communes selon le zoom.
   const [zoom, setZoom] = useState(() => initialViewRef.zoom ?? 5)
   const { data, mesh, isLoading, isError } = useScoreMesh(zoom)
+
+  // Emprise courante, événementielle (onMoveEnd/onLoad — pas de miroir
+  // viewState sur cette page) : alimente les départements visibles de la
+  // couche quartier.
+  const [bounds, setBounds] = useState<Bbox | null>(null)
+  const readBounds = (map: MaplibreMap) => {
+    const b = map.getBounds()
+    setBounds([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()])
+  }
+
+  // Couche quartier (IRIS), superposée à la maille communale au zoom fort :
+  // seulement pour les métriques publiées côté IRIS (score hérité, gap et
+  // prix propres au quartier). En bivarié, les DEUX axes doivent être mappés
+  // — les terciles restent ceux des communes, comme l'échelle univariée.
+  const hasIris = useHasIris()
+  const irisMapped =
+    hasIrisMetric(metric) && (!bivariate || hasIrisMetric(metricY))
+  const irisEnabled = hasIris && irisMapped && zoom >= IRIS_ZOOM_THRESHOLD
+  const visibleDepts = useVisibleDepartements(
+    irisEnabled ? bounds : null,
+    irisEnabled,
+  )
+  const iris = useIrisHigh(visibleDepts, irisEnabled)
+
+  // La dépose de la couche IRIS (dézoom, changement de métrique) ne déclenche
+  // pas de leave deck.gl : purge manuelle du survol.
+  useEffect(() => {
+    if (!irisEnabled) setHoveredIris(null)
+  }, [irisEnabled])
 
   // Marqueurs « avis » : index CDN (communes couvertes + centres), lazy.
   const { data: cities } = useAvisIndex(wordCloudEnabled)
@@ -314,9 +353,50 @@ export default function ScoreMap() {
       pickable: false,
     })
 
+    // Quartiers (IRIS) entre la maille communale et le contour de sélection :
+    // deck picke la couche du dessus, l'IRIS capte donc hover/clic là où il
+    // existe ; le contour ambre et les marqueurs avis restent au-dessus.
+    // Même échelle que les communes (gap IRIS sur le bound communal).
+    const irisLayer =
+      irisEnabled && iris.features.length > 0
+        ? new GeoJsonLayer<IrisFeature["properties"]>({
+            id: "score-iris-high",
+            data: {
+              type: "FeatureCollection" as const,
+              features: iris.features,
+            },
+            ...(fillBeforeId ? { beforeId: fillBeforeId } : {}),
+            filled: true,
+            stroked: true,
+            opacity,
+            getFillColor: (f) => {
+              const p = (f as IrisFeature).properties
+              return bivarScale
+                ? bivarScale.color(
+                    irisMetricValue(p, metric),
+                    irisMetricValue(p, metricY),
+                  )
+                : scale.color(irisMetricValue(p, metric))
+            },
+            getLineColor: [255, 255, 255, 150],
+            lineWidthMinPixels: 0.5,
+            pickable: true,
+            onHover: (info) =>
+              setHoveredIris((info.object as IrisFeature) ?? null),
+            onClick: (info) => {
+              const p = (info.object as IrisFeature | undefined)?.properties
+              if (p) selectCommune(p.code_commune)
+            },
+            updateTriggers: { getFillColor: [scale, bivarScale, metric, metricY] },
+          })
+        : null
+    const stack: Layer[] = irisLayer
+      ? [choropleth, irisLayer, highlight]
+      : [choropleth, highlight]
+
     // Marqueurs « avis » : indépendants de la maille — l'index (~80 grandes
     // villes) reste pertinent et lisible du zoom national au zoom communal.
-    if (!wordCloudEnabled || !cities) return [choropleth, highlight]
+    if (!wordCloudEnabled || !cities) return stack
 
     const wordCloudLayer = new ScatterplotLayer<AvisIndexEntry>({
       id: "wordcloud-cities",
@@ -334,14 +414,22 @@ export default function ScoreMap() {
         setSelectedCity(entry ? { code: entry.c, nom: entry.n ?? entry.c } : null)
       },
     })
-    return [choropleth, highlight, wordCloudLayer]
-  }, [data, mesh, scale, bivarScale, metric, metricY, opacity, fillBeforeId, selected, wordCloudEnabled, cities])
+    return [...stack, wordCloudLayer]
+  }, [data, mesh, scale, bivarScale, metric, metricY, opacity, fillBeforeId, selected, wordCloudEnabled, cities, irisEnabled, iris.features])
 
   const hoveredValue = hovered?.properties[metric]
   // Classes bivariées de la commune survolée, pour la ligne « Classe » du tooltip.
   const hoveredClasses =
     hovered && bivarScale
       ? bivarScale.classes(hovered.properties[metric], hovered.properties[metricY])
+      : null
+  // Même ligne « Classe » pour le quartier survolé (terciles communaux).
+  const hoveredIrisClasses =
+    hoveredIris && bivarScale
+      ? bivarScale.classes(
+          irisMetricValue(hoveredIris.properties, metric),
+          irisMetricValue(hoveredIris.properties, metricY),
+        )
       : null
 
   // À chaque (re)chargement de style — initial OU changement de fond — labels FR
@@ -388,6 +476,7 @@ export default function ScoreMap() {
         isError={isError}
         wordCloudEnabled={wordCloudEnabled}
         onWordCloudEnabled={setWordCloudEnabled}
+        irisActive={irisEnabled && iris.features.length > 0}
       />
 
       <div className="relative flex-1">
@@ -410,6 +499,7 @@ export default function ScoreMap() {
           onMoveEnd={(e) => {
             const c = e.viewState
             setZoom(c.zoom)
+            readBounds(e.target)
             patchParams(
               { v: `${c.latitude.toFixed(4)},${c.longitude.toFixed(4)},${c.zoom.toFixed(2)}` },
               true,
@@ -420,14 +510,53 @@ export default function ScoreMap() {
           // les mêmes ids ; le diff laisserait des libellés anglais résiduels).
           styleDiffing={false}
           onStyleData={(e) => syncMapStyle(e.target)}
-          onLoad={() => setMapReady(true)}
+          onLoad={(e) => {
+            setMapReady(true)
+            // Seed initial des bounds (deep-link ?v= à fort zoom : la couche
+            // quartier doit apparaître sans attendre un premier pan).
+            readBounds(e.target)
+          }}
           style={{ width: "100%", height: "100%" }}
         >
           <DeckOverlay layers={layers} />
         </Map>
 
+        {/* Tooltip quartier (IRIS) — prioritaire : la couche du dessus picke. */}
+        {hoveredIris && (
+          <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur pointer-coarse:hidden">
+            <IrisTooltipContent
+              p={hoveredIris.properties}
+              clickHint="Cliquer pour le détail de la commune"
+            >
+              <div className="mt-1">
+                {METRIC_LABELS[metric]} :{" "}
+                <span className="font-semibold text-accent">
+                  {fmt(metric, irisMetricValue(hoveredIris.properties, metric))}
+                </span>
+              </div>
+              {bivariate && (
+                <div>
+                  {METRIC_LABELS[metricY]} :{" "}
+                  <span className="font-semibold text-accent">
+                    {fmt(
+                      metricY,
+                      irisMetricValue(hoveredIris.properties, metricY),
+                    )}
+                  </span>
+                </div>
+              )}
+              {hoveredIrisClasses && (
+                <div className="text-muted-foreground">
+                  Classe : {BIVAR_CLASS_LABELS[hoveredIrisClasses[0]]} ×{" "}
+                  {BIVAR_CLASS_LABELS[hoveredIrisClasses[1]]}
+                </div>
+              )}
+            </IrisTooltipContent>
+          </div>
+        )}
+
         {/* Tooltip au survol */}
-        {hovered && (
+        {!hoveredIris && hovered && (
           <div className="absolute bottom-4 left-4 max-w-72 rounded-xl border bg-background/95 p-3 text-sm shadow-lg backdrop-blur pointer-coarse:hidden">
             <div className="font-display font-semibold">
               {hovered.properties.nom ?? hovered.properties.code_commune}

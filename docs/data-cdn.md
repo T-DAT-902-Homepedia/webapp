@@ -21,13 +21,16 @@ BASE = https://storage.googleapis.com/homepedia-web/v1
   "nb_communes": 34933,
   "nb_communes_scorees": 17774,
   "nb_communes_avis": 78,
+  "nb_iris": 16400,
+  "nb_iris_scores": 14500,
   "generated_at": "2026-07-07T20:08:24+00:00"
 }
 ```
 
 `nb_communes_avis` (0 ou absent = run sans analyse d'avis) sert de feature-gate à
-la section « avis » ; `schema_version` reste à 1 tant que les évolutions sont
-additives (le schéma zod tolère un futur bump).
+la section « avis » ; `nb_iris` (0 ou absent = run sans maille quartier) sert de
+feature-gate à la couche IRIS des cartes ; `schema_version` reste à 1 tant que
+les évolutions sont additives (le schéma zod tolère un futur bump).
 
 - Tout le reste est sous `{BASE}/{meta.base}/…`, **immuable** (cache-control 1 an,
   `immutable`) :
@@ -37,6 +40,10 @@ additives (le schéma zod tolère un futur bump).
   - `choropleth/departements-low.geojson` (~120 Ko gz), `choropleth/departements-mid.geojson` (~800 Ko gz)
   - `choropleth/communes-mid.geojson` (~3,4 Mo gz, 34 928 features, national)
   - `choropleth/communes-high/{dept}.geojson` ×101 (`{dept}` ∈ 01…95, 2A, 2B, 971…976)
+  - `choropleth/iris-high/{dept}.geojson` ×~104 (~80 Ko gz, max ~400 Ko) — maille
+    quartier (IRIS INSEE, ADR-0015 pipeline), **communes multi-IRIS uniquement**
+    (1 944 villes) : la couche se superpose à la maille commune, **404 = normal**
+    (département sans ville multi-IRIS)
   - `communes/{dept}.json` ×101 (fiches commune, groupées par département —
     incluent le bloc `avis` résumé quand la commune est couverte)
   - `avis/{dept}.json` (départements couverts uniquement, **404 = normal**) :
@@ -70,6 +77,18 @@ dimensions normalisées `n_*` (toutes nullables). Le `v1/score.geojson` racine e
 **déprécié** : `src/lib/score.ts` adapte désormais la choroplèthe communale
 versionnée à son ancien format.
 
+**Properties GeoJSON quartiers (IRIS)** : identité `code_iris`, `nom` (nom du
+quartier), `code_commune`, `nom_commune`, `type_iris`, `code_departement` ;
+données `prix_m2_median` (entier), `nb_transactions`, `fiable`,
+`annee_min`/`annee_max` ; score `score_commune`, `n_prix_iris`, `gap_iris`,
+`gap_pondere_iris` (3 décimales). Les noms diffèrent de la maille commune :
+`score_valeur` → `score_commune` (hérité de la ville), `gap` → `gap_iris`,
+`gap_pondere` → `gap_pondere_iris` (mapping dans `src/lib/iris.ts`). Le prix
+est une **médiane poolée** sur `annee_min`–`annee_max` : ne pas le comparer
+chiffre à chiffre au prix communal (millésime courant). `gap_iris > 0` =
+quartier sous-coté par rapport à la qualité de vie de sa ville ;
+`fiable = false` → valeurs à null (« pas de donnée », comme les communes).
+
 ## Sémantique métier
 
 - `score_valeur` ∈ [0,1] : qualité de vie composite. Poids : **emploi 30 %, proximité
@@ -85,7 +104,9 @@ versionnée à son ancien format.
 
 1. **Paris (75056), Lyon (69123), Marseille (13055) n'ont pas d'agrégat prix/évolution
    au niveau commune** : les transactions DVF sont codées par arrondissement (751xx,
-   6938x, 132xx), qui sont eux des features/fiches normales.
+   6938x, 132xx), qui sont eux des features/fiches normales. Les quartiers IRIS
+   portent aussi les codes arrondissements : la couche quartier affiche des
+   données sur Paris là où la choroplèthe communale montre « pas de donnée ».
 2. **5 fiches sans géométrie** (communes fusionnées entre millésimes) : atteignables par
    recherche/fiche mais pas par la carte.
 3. **Dérivation du département depuis un code commune** : 3 premiers caractères si
