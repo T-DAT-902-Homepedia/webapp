@@ -32,10 +32,11 @@
     --destructive: oklch(0.62 0.235 25);
     --destructive-foreground: oklch(1 0 0);
 
-    /* Rouge tricolore : accent de MARQUE décoratif (logo, hero landing) —
-       jamais un état interactif ni une donnée (le rouge YlOrRd des cartes
-       signifie « cher », --destructive signifie erreur/baisse). Carmin
-       (teinte 20) pour rester distinct du rouge erreur (teinte 25). */
+    /* Rouge tricolore : accent de MARQUE (logo, hero landing — texte
+       « français » et CTA qualité de vie, variant `brand` du Button) —
+       jamais une donnée (le rouge YlOrRd des cartes signifie « cher »,
+       --destructive signifie erreur/baisse). Carmin (teinte 20) pour
+       rester distinct du rouge erreur (teinte 25). */
     --brand-red: oklch(0.50 0.21 20);
 
     --border: oklch(0.91 0.008 80);

@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BarChart3,
   Gauge,
+  Heart,
   Map,
   Scale,
   TrendingUp,
@@ -151,8 +152,11 @@ export function Landing() {
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link to="/map">Analyser la qualité de vie</Link>
+            <Button size="lg" variant="brand" asChild>
+              <Link to="/map">
+                <Heart className="size-4 fill-current" />
+                Analyser la qualité de vie
+              </Link>
             </Button>
           </div>
         </div>
