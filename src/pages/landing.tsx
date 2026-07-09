@@ -1,4 +1,12 @@
-import { ArrowRight, BarChart3, Map, Scale } from "lucide-react"
+import {
+  ArrowLeftRight,
+  ArrowRight,
+  BarChart3,
+  Gauge,
+  Map,
+  Scale,
+  TrendingUp,
+} from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { FranceOutline } from "@/components/france-outline"
@@ -21,7 +29,7 @@ function buildStats(meta: Meta | undefined) {
       value: meta ? formatInt(meta.nb_communes_scorees) : "17 774",
       label: "communes notées qualité de vie",
     },
-    { value: "18", label: "régions comparables" },
+    { value: "12", label: "dimensions analysées par commune" },
     {
       value: meta ? String(meta.year) : "2024",
       label: "millésime DVF analysé",
@@ -29,24 +37,44 @@ function buildStats(meta: Meta | undefined) {
   ]
 }
 
+// Une carte par vraie fonctionnalité de l'app (routes de NAV + comparateur) :
+// pas de promesse au-delà de ce que les pages livrent.
 const FEATURES = [
   {
     icon: Map,
-    title: "Carte interactive",
+    title: "Carte des prix",
     description:
-      "Explorez les prix au m² sur toute la France, du niveau régional jusqu'à la commune. Zoomez, filtrez, et voyez le marché se dessiner sous vos yeux.",
+      "Choroplèthe, bulles ou heatmap : les prix au m² de la région à la commune, jusqu'aux ventes individuelles à fort zoom. Filtres par type de bien, quatre fonds de carte.",
   },
   {
-    icon: BarChart3,
-    title: "Statistiques par ville",
+    icon: Gauge,
+    title: "Qualité de vie",
     description:
-      "Prix médians, volumes de ventes, évolution sur dix ans : chaque commune a sa fiche détaillée, alimentée par les données ouvertes officielles.",
+      "Un score par commune décomposé en 12 dimensions — transport, sécurité, climat, services… — à croiser avec les prix sur une carte bivariée, avis d'habitants à l'appui dans les grandes villes.",
   },
   {
     icon: Scale,
-    title: "Comparaison de territoires",
+    title: "Communes sous-cotées",
     description:
-      "Mettez deux villes côte à côte et comparez prix, dynamique du marché et profil démographique pour éclairer vos décisions.",
+      "L'écart qualité/prix repère les territoires qui offrent plus que leur prix ne le suggère : classement national et carte dédiée pour dénicher les bonnes affaires.",
+  },
+  {
+    icon: BarChart3,
+    title: "Fiches communes",
+    description:
+      "Prix médians, volumes de ventes, évolution 2021-2025 et radar de qualité de vie : chaque commune a sa fiche détaillée, partageable par simple lien.",
+  },
+  {
+    icon: ArrowLeftRight,
+    title: "Comparateur",
+    description:
+      "Deux communes côte à côte : profils de score superposés, évolutions de prix et indicateurs clés réunis dans un même tableau.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Vues d'ensemble",
+    description:
+      "Distribution nationale des prix, nuage prix × qualité de vie et palmarès des régions : trois lectures du marché pour situer n'importe quelle commune.",
   },
 ]
 
@@ -98,16 +126,17 @@ export function Landing() {
             variant="outline"
             className="mb-6 border-accent/30 bg-accent/5 text-accent"
           >
-            Données ouvertes · DVF · INSEE
+            Données ouvertes
           </Badge>
           <h1 className="max-w-3xl font-display text-5xl leading-[1.05] font-bold tracking-tight text-balance md:text-7xl">
             Le marché immobilier français,{" "}
             <span className="text-accent">cartographié</span>.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-            Homepedia agrège les transactions immobilières publiques et les
-            données territoriales pour vous donner une vision claire des prix,
-            ville par ville, quartier par quartier.
+            Homepedia croise les transactions immobilières publiques avec les
+            données territoriales — transport, sécurité, climat, services —
+            pour lire les prix et la qualité de vie, de la région jusqu'à la
+            commune, à la vente près.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <Button size="lg" variant="accent" asChild>
@@ -188,7 +217,7 @@ export function Landing() {
             </Link>
           </nav>
           <p className="text-sm text-muted-foreground">
-            Données : DVF (Etalab) · INSEE
+            Données publiques : DVF (Etalab) · INSEE · Géorisques · ADEME
           </p>
         </div>
       </footer>
