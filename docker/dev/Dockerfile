@@ -22,5 +22,11 @@ WORKDIR /app
 
 EXPOSE 5173
 
-# Symlink node_modules dans /app après le bind mount, puis lancer vite
-CMD ["sh", "-c", "ln -sf /deps/node_modules /app/node_modules && npm run dev -- --host 0.0.0.0"]
+# Symlink node_modules dans /app après le bind mount, puis lancer vite.
+# UNIQUEMENT si absent : quand l'hôte fournit déjà node_modules via le bind
+# mount, `ln -sf` créait node_modules/node_modules -> /deps/node_modules, que
+# la résolution Node (remontée de dossiers) emprunte depuis l'intérieur de
+# node_modules — react-dom résolvait react dans /deps pendant que l'app le
+# résolvait dans /app : deux copies de React dans le bundle de l'optimiseur
+# Vite, « Invalid hook call » sur toutes les pages au premier re-bundle.
+CMD ["sh", "-c", "[ -e /app/node_modules ] || ln -s /deps/node_modules /app/node_modules; npm run dev -- --host 0.0.0.0"]
