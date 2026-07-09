@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom"
 import { GeoJsonLayer, ScatterplotLayer } from "deck.gl"
 import type { MapViewState, PickingInfo } from "@deck.gl/core"
 import Map, { type MapRef } from "react-map-gl/maplibre"
-import type { Map as MaplibreMap, StyleSpecification } from "maplibre-gl"
+import type { Map as MaplibreMap } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import {
@@ -27,7 +27,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { DeckOverlay } from "@/components/deck-overlay"
 import { MapTopBar } from "@/components/map-top-bar"
-import { ScoreSidebar, type Basemap, type MapView } from "@/components/score-sidebar"
+import {
+  BASEMAP_STYLES,
+  isBasemap,
+  syncBasemapStyle,
+  type Basemap,
+} from "@/lib/basemaps"
+import { ScoreSidebar, type MapView } from "@/components/score-sidebar"
 import WordCloudPopup from "@/components/WordCloudPopup"
 import { CommunePanel } from "@/components/commune-panel"
 import { useAvisIndex } from "@/hooks/useAvis"
@@ -77,9 +83,6 @@ function parseViewParam(v: string | null): MapViewState | null {
 const isMetric = (v: string | null): v is Metric =>
   v != null && (METRICS as string[]).includes(v)
 
-const isBasemap = (v: string | null): v is Basemap =>
-  v === "clair" || v === "sombre" || v === "satellite" || v === "couleur"
-
 // Dézoom plafonné : au-delà on ne verrait plus que l'océan autour de la France.
 const MIN_ZOOM = 4
 
@@ -90,42 +93,6 @@ const EMPTY_COLLECTION = { type: "FeatureCollection" as const, features: [] }
 // Ordre du sélecteur : score global, écart qualité/prix, prix par type de
 // bien, puis les 12 dimensions.
 const METRICS: Metric[] = ["score_valeur", "gap_pondere", ...PRIX_METRICS, ...DIMENSIONS]
-
-// Imagerie aérienne Esri (raster, sans clé) pour le fond « Satellite ».
-const SATELLITE_STYLE: StyleSpecification = {
-  version: 8,
-  glyphs:
-    "https://basemaps.cartocdn.com/gl/positron-gl-style/{fontstack}/{range}.pbf",
-  sources: {
-    "esri-imagery": {
-      type: "raster",
-      tiles: [
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      ],
-      tileSize: 256,
-      attribution:
-        "Tuiles © Esri — Source : Esri, Maxar, Earthstar Geographics, GIS User Community",
-    },
-  },
-  layers: [{ id: "esri-imagery", type: "raster", source: "esri-imagery" }],
-}
-
-// Fonds de carte : Carto (vecteur, schéma OpenMapTiles -> labels FR) + satellite.
-const BASEMAP_STYLES: Record<Basemap, string | StyleSpecification> = {
-  clair: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-  sombre: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-  couleur: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
-  satellite: SATELLITE_STYLE,
-}
-
-// Libellés en français : on remplace le champ texte des calques de symboles par
-// le nom FR de la tuile vectorielle (fallback latin puis nom par défaut).
-const FR_LABEL = [
-  "coalesce",
-  ["get", "name:fr"],
-  ["get", "name:latin"],
-  ["get", "name"],
-]
 
 /** Formate une valeur de métrique (gap signé, prix en €/m², reste en 0–1). */
 function fmt(metric: Metric, v: number | null | undefined): string {
@@ -368,30 +335,16 @@ export default function ScoreMap() {
       ? bivarScale.classes(hovered.properties[metric], hovered.properties[metricY])
       : null
 
-  // À chaque (re)chargement de style — initial OU changement de fond — repasse les
-  // labels en français et mémorise le 1er calque de symboles (beforeId). Le
-  // satellite (raster, sans symbole) court-circuite : pas de FR, couche au-dessus.
-  function syncMapStyle(map: MaplibreMap) {
-    const styleLayers = map.getStyle()?.layers ?? []
-    const symbols = styleLayers.filter((l) => l.type === "symbol")
-    if (symbols.length === 0) {
-      setFillBeforeId(undefined)
-      return
-    }
-    const fr = JSON.stringify(FR_LABEL)
-    // Idempotent : on ne réécrit que si un libellé n'est pas déjà en FR, sinon
-    // nos setLayoutProperty re-déclencheraient styledata en boucle.
-    const needsFr = symbols.some((l) => {
-      const tf = map.getLayoutProperty(l.id, "text-field")
-      return tf != null && JSON.stringify(tf) !== fr
-    })
-    if (needsFr) {
-      for (const layer of symbols) {
-        if (map.getLayoutProperty(layer.id, "text-field") == null) continue
-        map.setLayoutProperty(layer.id, "text-field", FR_LABEL)
-      }
-    }
-    setFillBeforeId(symbols[0]?.id)
+  // À chaque (re)chargement de style — initial OU changement de fond — labels FR
+  // + mémorisation du 1er calque de symboles (beforeId), cf. lib/basemaps.
+  const syncMapStyle = (map: MaplibreMap) => setFillBeforeId(syncBasemapStyle(map))
+
+  // Changement de fond : détacher le beforeId dans le même commit — l'ancien id
+  // n'existe pas (encore) dans le style suivant, deck ré-ajouterait les couches
+  // sous un calque fantôme ; le styledata du nouveau style le re-fournit.
+  const changeBasemap = (b: Basemap) => {
+    setFillBeforeId(undefined)
+    setBasemap(b)
   }
 
   return (
@@ -407,7 +360,7 @@ export default function ScoreMap() {
         opacity={opacity}
         onOpacity={setOpacity}
         basemap={basemap}
-        onBasemap={setBasemap}
+        onBasemap={changeBasemap}
         onCenter={centerOn}
         bivariate={bivariate}
         onBivariate={setBivariate}
@@ -424,7 +377,11 @@ export default function ScoreMap() {
           onSelectCommune={(entry) => selectCommune(entry.c)}
           extra={
             <Button variant="ghost" size="sm" asChild className="max-md:hidden">
-              <Link to={`/carte?v=${currentViewParam()}`}>Voir en prix</Link>
+              <Link
+                to={`/carte?v=${currentViewParam()}${basemap !== "clair" ? `&fond=${basemap}` : ""}`}
+              >
+                Voir en prix
+              </Link>
             </Button>
           }
         />

@@ -8,6 +8,7 @@ import {
   DivergingLegend,
   QuantileLegend,
 } from "@/components/map-legend"
+import { BASEMAP_KEYS, BASEMAP_LABELS, type Basemap } from "@/lib/basemaps"
 import { cn } from "@/lib/utils"
 import {
   DIMENSIONS,
@@ -17,15 +18,6 @@ import {
   type Metric,
 } from "@/lib/score"
 import type { makeBivariateScale, MetricScale } from "@/lib/scoreColors"
-
-export type Basemap = "clair" | "sombre" | "satellite" | "couleur"
-export const BASEMAP_LABELS: Record<Basemap, string> = {
-  clair: "Clair",
-  sombre: "Sombre",
-  satellite: "Satellite",
-  couleur: "Couleur",
-}
-const BASEMAP_KEYS = Object.keys(BASEMAP_LABELS) as Basemap[]
 
 export type MapView = { center: [number, number]; zoom: number }
 
