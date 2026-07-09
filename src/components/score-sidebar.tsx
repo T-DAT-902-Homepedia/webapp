@@ -147,41 +147,52 @@ function SidebarContent({
           <p className="mt-0.5 text-xs text-muted-foreground">
             Choisissez la métrique à cartographier.
           </p>
-          <div className="mt-2 space-y-2.5">
+          {/* Groupes repliables (la liste Qualité de vie compte 12 entrées),
+              tous ouverts par défaut. */}
+          <Accordion.Root
+            type="multiple"
+            defaultValue={METRIC_GROUPS.map((g) => g.title)}
+            className="mt-2"
+          >
             {METRIC_GROUPS.map((group) => (
-              <div key={group.title}>
-                <div className="mb-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                  {group.title}
-                </div>
-                <div className="space-y-0.5">
-                  {group.metrics.map((m) => {
-                    const active = m === metric
-                    return (
-                      <div
-                        key={m}
-                        className={cn(
-                          "flex items-center gap-1 rounded-md pr-1.5 transition-colors",
-                          active ? "bg-secondary" : "hover:bg-muted",
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => onMetric(m)}
+              <Accordion.Item key={group.title} value={group.title}>
+                <Accordion.Header>
+                  <Accordion.Trigger className="group flex w-full items-center justify-between py-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase transition-colors hover:text-foreground">
+                    {group.title}
+                    <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </Accordion.Trigger>
+                </Accordion.Header>
+                <Accordion.Content className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+                  <div className="space-y-0.5 pb-1.5">
+                    {group.metrics.map((m) => {
+                      const active = m === metric
+                      return (
+                        <div
+                          key={m}
                           className={cn(
-                            "flex-1 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                            active ? "font-medium text-accent" : "text-foreground/80",
+                            "flex items-center gap-1 rounded-md pr-1.5 transition-colors",
+                            active ? "bg-secondary" : "hover:bg-muted",
                           )}
                         >
-                          {METRIC_LABELS[m]}
-                        </button>
-                        <InfoTip text={METRIC_INFO[m]} label={METRIC_LABELS[m]} />
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+                          <button
+                            type="button"
+                            onClick={() => onMetric(m)}
+                            className={cn(
+                              "flex-1 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                              active ? "font-medium text-accent" : "text-foreground/80",
+                            )}
+                          >
+                            {METRIC_LABELS[m]}
+                          </button>
+                          <InfoTip text={METRIC_INFO[m]} label={METRIC_LABELS[m]} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </Accordion.Content>
+              </Accordion.Item>
             ))}
-          </div>
+          </Accordion.Root>
 
           {/* Mode bivarié : croise la métrique courante avec une seconde. */}
           <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
