@@ -12,6 +12,7 @@ import { PageShell } from "@/components/page-shell"
 import { LoadingHint, ErrorHint } from "@/components/status-hint"
 import { Sparkline } from "@/components/sparkline"
 import { cn } from "@/lib/utils"
+import { departementLabel } from "@/lib/departements"
 import { GAP_TEXT_NEG, GAP_TEXT_POS } from "@/lib/palettes"
 import { type ScoreProperties } from "@/lib/score"
 import { usePrixSeries } from "@/hooks/usePrixSeries"
@@ -123,7 +124,7 @@ export default function Undervalued() {
               <option value="">Tous</option>
               {deps.map((d) => (
                 <option key={d} value={d}>
-                  {d}
+                  {departementLabel(d)}
                 </option>
               ))}
             </select>

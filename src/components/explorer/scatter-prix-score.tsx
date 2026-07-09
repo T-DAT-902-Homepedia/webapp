@@ -12,6 +12,7 @@ import {
 } from "recharts"
 
 import { useChoropleth } from "@/hooks/useChoropleth"
+import { departementLabel } from "@/lib/departements"
 import { GAP_PRGN_HEX } from "@/lib/palettes"
 import { stratifiedSample } from "@/lib/sampling"
 import { formatEuroM2, formatScore, formatSigned } from "@/lib/format"
@@ -108,7 +109,7 @@ export function ScatterPrixScore() {
             <option value="">Tous</option>
             {depts.map((d) => (
               <option key={d} value={d}>
-                {d}
+                {departementLabel(d)}
               </option>
             ))}
           </select>
