@@ -77,7 +77,7 @@ export function CommunePanel({
       <div className="mt-auto border-t p-4">
         <Button className="w-full" variant="outline" asChild>
           <Link to={`/commune/${p.code_commune}`}>
-            Fiche complète (évolution, avis, indicateurs)
+            Fiche complète
             <ArrowRight className="size-4" />
           </Link>
         </Button>
