@@ -314,8 +314,9 @@ export default function ScoreMap() {
       pickable: false,
     })
 
-    if (mesh !== "communes" || !wordCloudEnabled || !cities)
-      return [choropleth, highlight]
+    // Marqueurs « avis » : indépendants de la maille — l'index (~80 grandes
+    // villes) reste pertinent et lisible du zoom national au zoom communal.
+    if (!wordCloudEnabled || !cities) return [choropleth, highlight]
 
     const wordCloudLayer = new ScatterplotLayer<AvisIndexEntry>({
       id: "wordcloud-cities",
